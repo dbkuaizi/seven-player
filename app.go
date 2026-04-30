@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"path/filepath"
 	"strings"
@@ -15,12 +14,13 @@ import (
 	"panplayer/internal/player"
 	"panplayer/internal/proxy"
 
-	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 type App struct {
 	ctx    context.Context
 	logger *slog.Logger
+	window application.Window
 
 	store   *config.Store
 	pan     *pan.Service
@@ -71,6 +71,16 @@ func NewApp(logger *slog.Logger) (*App, error) {
 		proxy:  proxyServer,
 		state:  config.DefaultState(),
 	}, nil
+}
+
+func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
+	a.startup(ctx)
+	return nil
+}
+
+func (a *App) ServiceShutdown() error {
+	a.shutdown(context.Background())
+	return nil
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -282,25 +292,21 @@ func (a *App) PlayFile(req PlayRequest) (*PlayResult, error) {
 }
 
 func (a *App) SelectPlayerPath(playerID string) (*SettingsView, error) {
-	if a.ctx == nil {
-		return nil, errors.New("runtime unavailable")
-	}
-
 	playerID = strings.TrimSpace(playerID)
 	title := "选择播放器可执行文件"
 	if playerID != "" {
 		title = "选择 " + player.NameOf(playerID)
 	}
 
-	path, err := wruntime.OpenFileDialog(a.ctx, wruntime.OpenDialogOptions{
-		Title: title,
-		Filters: []wruntime.FileFilter{
-			{
-				DisplayName: "播放器程序",
-				Pattern:     "*.exe",
-			},
-		},
-	})
+	dialog := application.Get().Dialog.OpenFile().
+		SetTitle(title).
+		AddFilter("播放器程序", "*.exe;*.app").
+		AddFilter("所有文件", "*")
+	if a.window != nil {
+		dialog.AttachToWindow(a.window)
+	}
+
+	path, err := dialog.PromptForSingleSelection()
 	if err != nil {
 		return nil, err
 	}
@@ -535,11 +541,14 @@ func (a *App) settingsView() SettingsView {
 	}
 }
 
-func (a *App) NotifyError(title string, err error) {
-	if a.ctx == nil || err == nil {
+func (a *App) notifyError(title string, err error) {
+	if err == nil {
 		return
 	}
-	wruntime.LogError(a.ctx, fmt.Sprintf("%s: %v", title, err))
+	a.logger.Error(title, "error", err)
+	if a.window != nil {
+		a.window.Error("%s: %v", title, err)
+	}
 }
 
 func (a *App) syncSessionState() {

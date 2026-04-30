@@ -25,8 +25,8 @@ import {
   SelectSubtitlePath,
   SelectTorrentFileAsMagnet,
   StartQRCodeLogin,
-} from '../wailsjs/go/main/App'
-import { ClipboardSetText } from '../wailsjs/runtime/runtime'
+} from '../bindings/panplayer/app'
+import { Clipboard } from '@wailsio/runtime'
 
 const navigationItems = [
   { value: 'files', label: '文件管理', icon: 'mdi-folder-outline' },
@@ -1510,7 +1510,7 @@ async function copyOfflineURL(task) {
   }
 
   try {
-    await ClipboardSetText(task.url)
+    await Clipboard.SetText(task.url)
     showNotice('success', '任务链接已复制到剪贴板。')
   } catch (error) {
     showError(error, '复制任务链接失败')

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Name=PanPlayer 115
+Comment=A desktop player for 115 cloud drive media
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/panplayer115 %u
+Terminal=false
+Type=Application
+Icon=panplayer115
+Categories=Utility;
+StartupWMClass=panplayer115

@@ -1,12 +1,5 @@
 branch:
   - buttons:
       - name: Build macOS ARM64
-        description: Requires a CNB Enterprise or self-managed macOS runner; public CNB runners are Linux Docker nodes.
+        description: Build a Wails3 darwin/arm64 package with Docker cross-compilation.
         event: web_trigger_build_macos_arm64
-        inputs:
-          CNB_MACOS_RUNNER_TAGS:
-            name: macOS runner tag
-            description: Tag of your self-managed macOS build node, for example macos-arm64.
-            type: input
-            required: true
-            default: macos-arm64

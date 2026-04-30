@@ -1,6 +1,10 @@
 build/bin
+bin/
+.task/
 build/windows/installer/wails_tools.nsh
 build/windows/installer/tmp/
+build/windows/nsis/wails_tools.nsh
+build/windows/nsis/tmp/
 frontend/dist
 node_modules
 frontend/node_modules

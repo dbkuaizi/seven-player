@@ -7,9 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 //go:embed all:frontend/dist
@@ -18,13 +16,28 @@ var assets embed.FS
 func main() {
 	logger := newLogger()
 
-	app, err := NewApp(logger)
+	service, err := NewApp(logger)
 	if err != nil {
 		logger.Error("failed to create app", "error", err)
 		os.Exit(1)
 	}
 
-	err = wails.Run(&options.App{
+	app := application.New(application.Options{
+		Name:        "PanPlayer 115",
+		Description: "115 cloud drive desktop player",
+		Logger:      logger,
+		Services: []application.Service{
+			application.NewService(service),
+		},
+		Assets: application.AssetOptions{
+			Handler: application.AssetFileServerFS(assets),
+		},
+		Mac: application.MacOptions{
+			ApplicationShouldTerminateAfterLastWindowClosed: true,
+		},
+	})
+
+	service.window = app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:            "PanPlayer 115",
 		Width:            820,
 		Height:           660,
@@ -32,21 +45,12 @@ func main() {
 		MinHeight:        660,
 		DisableResize:    false,
 		Frameless:        false,
-		BackgroundColour: &options.RGBA{R: 250, G: 250, B: 250, A: 255},
-		AssetServer: &assetserver.Options{
-			Assets: assets,
-		},
-		DragAndDrop: &options.DragAndDrop{
-			EnableFileDrop:     true,
-			DisableWebViewDrop: true,
-		},
-		OnStartup:  app.startup,
-		OnShutdown: app.shutdown,
-		Bind: []interface{}{
-			app,
-		},
+		BackgroundColour: application.NewRGBA(250, 250, 250, 255),
+		EnableFileDrop:   true,
+		URL:              "/",
 	})
-	if err != nil {
+
+	if err := app.Run(); err != nil {
 		logger.Error("wails run failed", "error", err)
 		os.Exit(1)
 	}

@@ -1,6 +1,6 @@
 # PanPlayer 115
 
-`PanPlayer 115` 是一个用 `Go + Wails + Vue 3 + Vuetify` 实现的桌面播放器原型：
+`PanPlayer 115` 是一个用 `Go + Wails v3 + Vue 3 + Vuetify` 实现的桌面播放器原型：
 
 - 启动后直接展示 115 网盘目录
 - 用 115 官方二维码接口扫码登录
@@ -26,7 +26,7 @@
 ## 运行前提
 
 1. 安装 Go
-2. 安装 Wails CLI
+2. 安装 Wails v3 CLI: `go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha.80`
 3. 系统能运行 Wails 桌面应用
 4. 安装以下任一播放器，或者在应用里手动指定路径：
    - `mpv`
@@ -38,16 +38,24 @@
 ## 开发运行
 
 ```bash
-wails dev
+wails3 dev
 ```
 
-前端位于 `frontend/`，使用 `Vite` 构建；直接运行 `wails dev` / `wails build` 即可自动安装和编译前端依赖。
+前端位于 `frontend/`，使用 `Vite` 构建；直接运行 `wails3 dev` / `wails3 build` 即可自动安装和编译前端依赖。
 
 ## 打包
 
 ```bash
-wails build
+wails3 build
 ```
+
+在只有 Windows 的机器上构建 macOS ARM64 包，需要 Docker Desktop：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build-macos-arm64-docker.ps1
+```
+
+产物会写到 `dist/PanPlayer115-darwin-arm64.zip`，同时生成 `.sha256` 校验文件。这个包是未签名构建，分发给其他 macOS 用户时仍建议做 Developer ID 签名和 notarize。
 
 ## 凭证与设置
 

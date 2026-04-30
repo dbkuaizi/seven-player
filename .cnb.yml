@@ -1,18 +1,16 @@
 "**":
   web_trigger_build_macos_arm64:
-    - name: Build macOS ARM64
+    - name: Build macOS ARM64 with Wails3 Docker
       runner:
-        tags:
-          - cnb:arch:arm64:v8
-          - $CNB_MACOS_RUNNER_TAGS
+        tags: cnb:arch:amd64
         cpus: 8
+      docker:
+        build: build/docker/Dockerfile.cross
       env:
-        CNB_MACOS_RUNNER_TAGS: macos-arm64
-        WAILS_VERSION: v2.12.0
         OUTPUT_ZIP: dist/PanPlayer115-darwin-arm64.zip
       stages:
-        - name: Build Wails app
-          script: bash .cnb/scripts/build-macos-arm64.sh
+        - name: Build Wails3 macOS app
+          script: sh .cnb/scripts/build-macos-arm64-wails3.sh
         - name: Upload build artifact
           image: cnbcool/attachments:latest
           settings:
@@ -22,18 +20,17 @@
 
 "$":
   tag_push:
-    - name: Release macOS ARM64
+    - name: Release macOS ARM64 with Wails3 Docker
       runner:
-        tags:
-          - cnb:arch:arm64:v8
-          - macos-arm64
+        tags: cnb:arch:amd64
         cpus: 8
+      docker:
+        build: build/docker/Dockerfile.cross
       env:
-        WAILS_VERSION: v2.12.0
         OUTPUT_ZIP: dist/PanPlayer115-darwin-arm64.zip
       stages:
-        - name: Build Wails app
-          script: bash .cnb/scripts/build-macos-arm64.sh
+        - name: Build Wails3 macOS app
+          script: sh .cnb/scripts/build-macos-arm64-wails3.sh
         - name: Create release
           type: git:release
           options:

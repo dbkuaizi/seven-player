@@ -1,15 +1,15 @@
 {
 	"fixed": {
-		"file_version": "{{.Info.ProductVersion}}"
+		"file_version": "0.1.0"
 	},
 	"info": {
 		"0000": {
-			"ProductVersion": "{{.Info.ProductVersion}}",
-			"CompanyName": "{{.Info.CompanyName}}",
-			"FileDescription": "{{.Info.ProductName}}",
-			"LegalCopyright": "{{.Info.Copyright}}",
-			"ProductName": "{{.Info.ProductName}}",
-			"Comments": "{{.Info.Comments}}"
+			"ProductVersion": "0.1.0",
+			"CompanyName": "OpenAI Codex",
+			"FileDescription": "A desktop player for 115 cloud drive media",
+			"LegalCopyright": "(c) 2026, OpenAI Codex",
+			"ProductName": "PanPlayer 115",
+			"Comments": "PanPlayer 115"
 		}
 	}
 }

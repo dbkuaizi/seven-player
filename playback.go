@@ -12,7 +12,7 @@ import (
 	"panplayer/internal/pan"
 	"panplayer/internal/player"
 
-	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 type PlayRequest struct {
@@ -43,24 +43,19 @@ type PlaybackStateView struct {
 }
 
 func (a *App) SelectSubtitlePath(pickCode string) (*PlaybackStateView, error) {
-	if a.ctx == nil {
-		return nil, errors.New("runtime unavailable")
-	}
-
 	pickCode = strings.TrimSpace(pickCode)
 	if pickCode == "" {
 		return nil, errors.New("缺少 pickcode")
 	}
 
-	path, err := wruntime.OpenFileDialog(a.ctx, wruntime.OpenDialogOptions{
-		Title: "选择外挂字幕",
-		Filters: []wruntime.FileFilter{
-			{
-				DisplayName: "字幕文件",
-				Pattern:     "*.srt;*.ass;*.ssa;*.vtt;*.sub",
-			},
-		},
-	})
+	dialog := application.Get().Dialog.OpenFile().
+		SetTitle("选择外挂字幕").
+		AddFilter("字幕文件", "*.srt;*.ass;*.ssa;*.vtt;*.sub")
+	if a.window != nil {
+		dialog.AttachToWindow(a.window)
+	}
+
+	path, err := dialog.PromptForSingleSelection()
 	if err != nil {
 		return nil, err
 	}

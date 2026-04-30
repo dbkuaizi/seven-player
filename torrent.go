@@ -9,23 +9,18 @@ import (
 	"os"
 	"strings"
 
-	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 func (a *App) SelectTorrentFileAsMagnet() (string, error) {
-	if a.ctx == nil {
-		return "", errors.New("runtime unavailable")
+	dialog := application.Get().Dialog.OpenFile().
+		SetTitle("选择 BT 种子文件").
+		AddFilter("BT 种子文件", "*.torrent")
+	if a.window != nil {
+		dialog.AttachToWindow(a.window)
 	}
 
-	path, err := wruntime.OpenFileDialog(a.ctx, wruntime.OpenDialogOptions{
-		Title: "选择 BT 种子文件",
-		Filters: []wruntime.FileFilter{
-			{
-				DisplayName: "BT 种子文件",
-				Pattern:     "*.torrent",
-			},
-		},
-	})
+	path, err := dialog.PromptForSingleSelection()
 	if err != nil {
 		return "", err
 	}
