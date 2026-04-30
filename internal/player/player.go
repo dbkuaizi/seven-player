@@ -232,6 +232,7 @@ func (l *Launcher) Launch(req Request) (*LaunchResult, error) {
 
 		args := spec.buildArgs(req, path, logPath)
 		cmd := exec.Command(path, args...)
+		hideConsoleWindow(cmd)
 		if err := cmd.Start(); err != nil {
 			lastResolveErr = fmt.Errorf("%s 启动失败: %w", spec.name, err)
 			continue

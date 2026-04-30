@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 //go:embed all:frontend/dist
@@ -47,7 +48,11 @@ func main() {
 		Frameless:        false,
 		BackgroundColour: application.NewRGBA(250, 250, 250, 255),
 		EnableFileDrop:   true,
+		Hidden:           true,
 		URL:              "/",
+	})
+	service.window.OnWindowEvent(events.Common.WindowRuntimeReady, func(_ *application.WindowEvent) {
+		service.window.Show()
 	})
 
 	if err := app.Run(); err != nil {

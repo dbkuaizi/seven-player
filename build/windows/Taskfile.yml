@@ -43,7 +43,7 @@ tasks:
     cmds:
       - task: generate:syso
       - go build {{.BUILD_FLAGS}} -o "{{.BIN_DIR}}/{{.APP_NAME}}.exe"
-      - cmd: powershell Remove-item *.syso
+      - cmd: powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command "Remove-Item -Force -ErrorAction SilentlyContinue *.syso"
         platforms: [windows]
       - cmd: rm -f *.syso
         platforms: [linux, darwin]
