@@ -22,12 +22,12 @@ export function ClearSubtitlePath(arg1) {
   return window['go']['main']['App']['ClearSubtitlePath'](arg1);
 }
 
-export function DeletePlayerPath(arg1) {
-  return window['go']['main']['App']['DeletePlayerPath'](arg1);
-}
-
 export function DeleteOfflineTasks(arg1) {
   return window['go']['main']['App']['DeleteOfflineTasks'](arg1);
+}
+
+export function DeletePlayerPath(arg1) {
+  return window['go']['main']['App']['DeletePlayerPath'](arg1);
 }
 
 export function ListDirectory(arg1, arg2, arg3) {
@@ -62,20 +62,16 @@ export function RevealConfigPath() {
   return window['go']['main']['App']['RevealConfigPath']();
 }
 
-export function SearchFiles(arg1, arg2, arg3) {
-  return window['go']['main']['App']['SearchFiles'](arg1, arg2, arg3);
-}
-
-export function SaveShowTitleBadgesEnabled(arg1) {
-  return window['go']['main']['App']['SaveShowTitleBadgesEnabled'](arg1);
-}
-
 export function SaveFileListDensity(arg1) {
   return window['go']['main']['App']['SaveFileListDensity'](arg1);
 }
 
-export function SaveSmallFileFilterMB(arg1) {
-  return window['go']['main']['App']['SaveSmallFileFilterMB'](arg1);
+export function SaveHideSmallFilesEnabled(arg1) {
+  return window['go']['main']['App']['SaveHideSmallFilesEnabled'](arg1);
+}
+
+export function SavePlayerDisabled(arg1, arg2) {
+  return window['go']['main']['App']['SavePlayerDisabled'](arg1, arg2);
 }
 
 export function SavePlayerPath(arg1, arg2) {
@@ -86,8 +82,16 @@ export function SavePreferredPlayer(arg1) {
   return window['go']['main']['App']['SavePreferredPlayer'](arg1);
 }
 
-export function SavePlayerDisabled(arg1, arg2) {
-  return window['go']['main']['App']['SavePlayerDisabled'](arg1, arg2);
+export function SaveShowTitleBadgesEnabled(arg1) {
+  return window['go']['main']['App']['SaveShowTitleBadgesEnabled'](arg1);
+}
+
+export function SaveSmallFileFilterMB(arg1) {
+  return window['go']['main']['App']['SaveSmallFileFilterMB'](arg1);
+}
+
+export function SearchFiles(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SearchFiles'](arg1, arg2, arg3);
 }
 
 export function SelectPlayerPath(arg1) {

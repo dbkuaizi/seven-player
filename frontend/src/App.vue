@@ -2693,7 +2693,7 @@ function sleep(ms) {
               variant="flat"
               @click="openLoginDialog('qr')"
             >
-              <v-card-item class="account-panel-head pt-2 pb-1">
+              <v-card-item class="account-panel-head account-panel-head--guest">
                 <template #prepend>
                   <v-avatar size="42" color="primary" variant="tonal">
                     <v-icon>mdi-account-outline</v-icon>
@@ -2711,21 +2711,6 @@ function sleep(ms) {
                   <v-icon size="18">mdi-login</v-icon>
                 </template>
               </v-card-item>
-
-              <v-divider />
-
-              <v-card-text class="account-panel-body">
-                <div class="account-info-list">
-                  <div class="account-info-row">
-                    <span class="account-info-label">登录方式</span>
-                    <span class="account-info-value">扫码 / Cookie</span>
-                  </div>
-                </div>
-
-                <div class="account-panel-caption text-caption text-medium-emphasis">
-                  登录状态会保存在应用目录下的 SQLite 文件中。
-                </div>
-              </v-card-text>
             </v-card>
           </div>
         </div>
@@ -3838,6 +3823,10 @@ function sleep(ms) {
 
 .account-panel-head {
   align-items: center;
+}
+
+.account-panel-head--guest {
+  padding: 8px 10px !important;
 }
 
 .account-panel-title {

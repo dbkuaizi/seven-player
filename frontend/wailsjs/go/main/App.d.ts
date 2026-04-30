@@ -13,9 +13,9 @@ export function ClearPlaybackProgress(arg1:string):Promise<main.PlaybackStateVie
 
 export function ClearSubtitlePath(arg1:string):Promise<main.PlaybackStateView>;
 
-export function DeletePlayerPath(arg1:string):Promise<main.SettingsView>;
-
 export function DeleteOfflineTasks(arg1:main.DeleteOfflineRequest):Promise<pan.OfflineListView>;
+
+export function DeletePlayerPath(arg1:string):Promise<main.SettingsView>;
 
 export function ListDirectory(arg1:string,arg2:number,arg3:number):Promise<pan.DirectoryView>;
 
@@ -33,19 +33,21 @@ export function PreviewDirectory(arg1:string):Promise<pan.DirectoryView>;
 
 export function RevealConfigPath():Promise<string>;
 
-export function SearchFiles(arg1:string,arg2:number,arg3:number):Promise<pan.SearchResultView>;
-
-export function SaveShowTitleBadgesEnabled(arg1:boolean):Promise<main.SettingsView>;
-
 export function SaveFileListDensity(arg1:string):Promise<main.SettingsView>;
 
-export function SaveSmallFileFilterMB(arg1:number):Promise<main.SettingsView>;
+export function SaveHideSmallFilesEnabled(arg1:boolean):Promise<main.SettingsView>;
+
+export function SavePlayerDisabled(arg1:string,arg2:boolean):Promise<main.SettingsView>;
 
 export function SavePlayerPath(arg1:string,arg2:string):Promise<main.SettingsView>;
 
 export function SavePreferredPlayer(arg1:string):Promise<main.SettingsView>;
 
-export function SavePlayerDisabled(arg1:string,arg2:boolean):Promise<main.SettingsView>;
+export function SaveShowTitleBadgesEnabled(arg1:boolean):Promise<main.SettingsView>;
+
+export function SaveSmallFileFilterMB(arg1:number):Promise<main.SettingsView>;
+
+export function SearchFiles(arg1:string,arg2:number,arg3:number):Promise<pan.SearchResultView>;
 
 export function SelectPlayerPath(arg1:string):Promise<main.SettingsView>;
 

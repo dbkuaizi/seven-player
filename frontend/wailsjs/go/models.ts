@@ -3,7 +3,7 @@ export namespace main {
 	export class AddOfflineRequest {
 	    urls: string[];
 	    saveDirId: string;
-	    saveDirPath: pan.Breadcrumb[];
+	    saveDirPath?: pan.Breadcrumb[];
 	
 	    static createFrom(source: any = {}) {
 	        return new AddOfflineRequest(source);
@@ -15,7 +15,7 @@ export namespace main {
 	        this.saveDirId = source["saveDirId"];
 	        this.saveDirPath = this.convertValues(source["saveDirPath"], pan.Breadcrumb);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -47,7 +47,7 @@ export namespace main {
 	        this.id = source["id"];
 	        this.path = this.convertValues(source["path"], pan.Breadcrumb);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -162,6 +162,7 @@ export namespace main {
 	        this.deleteFiles = source["deleteFiles"];
 	    }
 	}
+	
 	export class PlayRequest {
 	    pickCode: string;
 	    name: string;
@@ -353,12 +354,12 @@ export namespace pan {
 	    userName: string;
 	    faceUrl: string;
 	    isVip: boolean;
-	    vipLabel: string;
-	    vipForever: boolean;
-	    vipExpireAt: string;
-	    spaceTotal: number;
-	    spaceUsed: number;
-	    spaceRemain: number;
+	    vipLabel?: string;
+	    vipForever?: boolean;
+	    vipExpireAt?: string;
+	    spaceTotal?: number;
+	    spaceUsed?: number;
+	    spaceRemain?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new UserView(source);
@@ -394,46 +395,6 @@ export namespace pan {
 	        this.message = source["message"];
 	        this.loggedIn = source["loggedIn"];
 	        this.user = this.convertValues(source["user"], UserView);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class SearchResultView {
-	    query: string;
-	    count: number;
-	    offset: number;
-	    limit: number;
-	    hasMore: boolean;
-	    items: FileItem[];
-	
-	    static createFrom(source: any = {}) {
-	        return new SearchResultView(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.query = source["query"];
-	        this.count = source["count"];
-	        this.offset = source["offset"];
-	        this.limit = source["limit"];
-	        this.hasMore = source["hasMore"];
-	        this.items = this.convertValues(source["items"], FileItem);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -539,6 +500,46 @@ export namespace pan {
 		}
 	}
 	
+	export class SearchResultView {
+	    query: string;
+	    count: number;
+	    offset: number;
+	    limit: number;
+	    hasMore: boolean;
+	    items: FileItem[];
+	
+	    static createFrom(source: any = {}) {
+	        return new SearchResultView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.query = source["query"];
+	        this.count = source["count"];
+	        this.offset = source["offset"];
+	        this.limit = source["limit"];
+	        this.hasMore = source["hasMore"];
+	        this.items = this.convertValues(source["items"], FileItem);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 
 }
 
@@ -578,3 +579,4 @@ export namespace player {
 	}
 
 }
+
