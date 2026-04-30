@@ -1,0 +1,12 @@
+branch:
+  - buttons:
+      - name: Build macOS ARM64
+        description: Build a Wails darwin/arm64 package on a macOS runner.
+        event: web_trigger_build_macos_arm64
+        inputs:
+          CNB_MACOS_RUNNER_TAGS:
+            name: macOS runner tag
+            description: CNB runner tag that selects your macOS build node.
+            type: input
+            required: true
+            default: macos-arm64

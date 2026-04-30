@@ -1,0 +1,41 @@
+"**":
+  web_trigger_build_macos_arm64:
+    - name: Build macOS ARM64
+      runner:
+        tags: $CNB_MACOS_RUNNER_TAGS
+      env:
+        CNB_MACOS_RUNNER_TAGS: macos-arm64
+        WAILS_VERSION: v2.12.0
+        OUTPUT_ZIP: dist/PanPlayer115-darwin-arm64.zip
+      stages:
+        - name: Build Wails app
+          script: bash .cnb/scripts/build-macos-arm64.sh
+        - name: Upload build artifact
+          image: cnbcool/attachments:latest
+          settings:
+            attachments:
+              - dist/PanPlayer115-darwin-arm64.zip
+              - dist/PanPlayer115-darwin-arm64.zip.sha256
+
+"$":
+  tag_push:
+    - name: Release macOS ARM64
+      runner:
+        tags: macos-arm64
+      env:
+        WAILS_VERSION: v2.12.0
+        OUTPUT_ZIP: dist/PanPlayer115-darwin-arm64.zip
+      stages:
+        - name: Build Wails app
+          script: bash .cnb/scripts/build-macos-arm64.sh
+        - name: Create release
+          type: git:release
+          options:
+            title: "${CNB_BRANCH}"
+            description: "PanPlayer 115 macOS ARM64 build for ${CNB_BRANCH}"
+        - name: Upload release artifact
+          image: cnbcool/attachments:latest
+          settings:
+            attachments:
+              - dist/PanPlayer115-darwin-arm64.zip
+              - dist/PanPlayer115-darwin-arm64.zip.sha256
