@@ -10,6 +10,7 @@ export {
 export {
     AddOfflineRequest,
     BootstrapResult,
+    BuiltinPlaybackSource,
     DeleteOfflineRequest,
     DirectoryTargetView,
     PlayRequest,

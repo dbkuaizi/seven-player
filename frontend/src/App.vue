@@ -13,7 +13,9 @@ import {
   LoginWithCookie,
   Logout,
   PlayFile,
+  PrepareBuiltinPlayback,
   PreviewDirectory,
+  SavePlaybackProgress,
   SearchFiles,
   SaveFileListDensity,
   SavePlayerDisabled,
@@ -137,6 +139,12 @@ const badgeVisibleCounts = ref({})
 const jumpDialogVisible = ref(false)
 const jumpInput = ref('')
 const jumpTargetKey = ref('')
+
+const builtinPlayerDialog = ref(false)
+const builtinPlayerLoading = ref(false)
+const builtinPlayerElement = ref(null)
+const builtinPlayer = ref(createEmptyBuiltinPlayer())
+const builtinPlayerSeekKey = ref('')
 
 const badgeRowElements = new Map()
 let badgeMeasureCanvas = null
@@ -364,6 +372,23 @@ const selectedLastPlayedText = computed(() => {
     return '暂无'
   }
   return formatDateTime(selectedItem.value.lastPlayedAt)
+})
+
+const builtinTextTracks = computed(() => {
+  if (!builtinPlayer.value?.subtitleUrl || !builtinPlayer.value?.subtitleType) {
+    return []
+  }
+
+  return [
+    {
+      src: builtinPlayer.value.subtitleUrl,
+      type: builtinPlayer.value.subtitleType,
+      kind: 'subtitles',
+      label: builtinPlayer.value.subtitleName || '外挂字幕',
+      language: 'zh-CN',
+      default: true,
+    },
+  ]
 })
 
 const downloadTasks = computed(() => downloadState.value?.tasks ?? [])
@@ -1006,9 +1031,148 @@ async function playVideo(item, options = {}) {
 
     showNotice('success', segments.join(' · '), 4200)
   } catch (error) {
-    showError(error, '启动播放失败')
+    const fallbackOpened = await openBuiltinPlayer(item, options, {
+      fallback: true,
+      loading: false,
+    })
+    if (fallbackOpened) {
+      showNotice('warning', '本地播放器启动失败，已切换到内置播放器。', 5200)
+    } else {
+      showError(error, '启动播放失败')
+    }
   } finally {
     actionLoading.value = false
+  }
+}
+
+async function openBuiltinPlayer(item = selectedItem.value, options = {}, meta = {}) {
+  if (!item?.isVideo) {
+    return false
+  }
+
+  if (meta.loading !== false) {
+    actionLoading.value = true
+  }
+  builtinPlayerLoading.value = true
+  selectedItem.value = item
+
+  try {
+    const result = await PrepareBuiltinPlayback({
+      pickCode: item.pickCode,
+      name: item.name,
+      startMs: options.startMs || 0,
+      fromStart: Boolean(options.fromStart),
+      subtitle: options.subtitle || item.subtitlePath || '',
+    })
+
+    builtinPlayer.value = {
+      pickCode: item.pickCode,
+      rowKey: item.rowKey,
+      title: result?.title || item.displayName || item.name || 'PanPlayer 115',
+      url: result?.url || '',
+      startMs: Number(result?.startMs || 0),
+      resumeUsed: Boolean(result?.resumeUsed),
+      subtitleUrl: result?.subtitleUrl || '',
+      subtitleName: result?.subtitleName || '',
+      subtitlePath: result?.subtitlePath || item.subtitlePath || '',
+      subtitleType: result?.subtitleType || '',
+      subtitleUsable: Boolean(result?.subtitleUsable),
+      currentMs: Number(result?.startMs || 0),
+      ended: false,
+    }
+    builtinPlayerSeekKey.value = ''
+    builtinPlayerDialog.value = true
+
+    applyPlaybackState(item.pickCode, {
+      resumeMs: options.fromStart ? 0 : (result?.startMs || item.resumeMs || 0),
+      subtitlePath:
+        typeof result?.subtitlePath === 'string' ? result.subtitlePath : (item.subtitlePath || ''),
+      lastPlayedAt: new Date().toISOString(),
+    })
+
+    if (result?.subtitlePath && !result?.subtitleUsable) {
+      showNotice('warning', '内置播放器暂不支持当前字幕格式。')
+    } else if (!meta.fallback && !meta.silent) {
+      showNotice('success', '已打开内置播放器。')
+    }
+
+    return true
+  } catch (error) {
+    if (!meta.fallback) {
+      showError(error, '内置播放器启动失败')
+    }
+    return false
+  } finally {
+    builtinPlayerLoading.value = false
+    if (meta.loading !== false) {
+      actionLoading.value = false
+    }
+  }
+}
+
+function handleBuiltinCanPlay() {
+  const player = builtinPlayerElement.value
+  const startMS = Number(builtinPlayer.value?.startMs || 0)
+  const key = `${builtinPlayer.value?.pickCode || ''}:${startMS}`
+  if (!player || startMS <= 0 || builtinPlayerSeekKey.value === key) {
+    return
+  }
+
+  player.currentTime = startMS / 1000
+  builtinPlayerSeekKey.value = key
+}
+
+function handleBuiltinTimeUpdate(event) {
+  const currentTime = Number(event?.detail?.currentTime || 0)
+  if (!Number.isFinite(currentTime)) {
+    return
+  }
+  builtinPlayer.value = {
+    ...builtinPlayer.value,
+    currentMs: Math.max(0, Math.floor(currentTime * 1000)),
+  }
+}
+
+function handleBuiltinEnded() {
+  builtinPlayer.value = {
+    ...builtinPlayer.value,
+    currentMs: 0,
+    ended: true,
+  }
+  persistBuiltinProgress()
+}
+
+function handleBuiltinError() {
+  showNotice('warning', '内置播放器无法播放当前视频，请尝试 mpv 或 VLC。', 5200)
+}
+
+function closeBuiltinPlayer() {
+  persistBuiltinProgress()
+  if (builtinPlayerElement.value?.pause) {
+    builtinPlayerElement.value.pause()
+  }
+  builtinPlayerDialog.value = false
+  builtinPlayer.value = createEmptyBuiltinPlayer()
+}
+
+async function playExternalFromBuiltin() {
+  const item = selectedItem.value
+  closeBuiltinPlayer()
+  await playVideo(item)
+}
+
+async function persistBuiltinProgress() {
+  const source = builtinPlayer.value
+  if (!source?.pickCode) {
+    return
+  }
+
+  const positionMS = source.ended ? 0 : Math.max(0, Number(source.currentMs || 0))
+  try {
+    const result = await SavePlaybackProgress(source.pickCode, source.title || '', positionMS)
+    applyPlaybackState(source.pickCode, result)
+  } catch (error) {
+    showError(error, '保存播放进度失败')
   }
 }
 
@@ -1023,6 +1187,20 @@ async function chooseSubtitle(item = selectedItem.value) {
     const result = await SelectSubtitlePath(item.pickCode)
     applyPlaybackState(item.pickCode, result)
     showNotice('success', result?.subtitleName || '外挂字幕路径已保存。')
+    if (builtinPlayerDialog.value && builtinPlayer.value.pickCode === item.pickCode) {
+      const refreshedItem = selectedItem.value?.pickCode === item.pickCode
+        ? selectedItem.value
+        : normalizeItem({
+          ...item,
+          subtitlePath: result?.subtitlePath || '',
+        })
+      await openBuiltinPlayer(refreshedItem, {
+        startMs: builtinPlayer.value.currentMs || 0,
+      }, {
+        loading: false,
+        silent: true,
+      })
+    }
   } catch (error) {
     showError(error, '选择字幕失败')
   } finally {
@@ -1041,6 +1219,16 @@ async function clearSubtitle(item = selectedItem.value) {
     const result = await ClearSubtitlePath(item.pickCode)
     applyPlaybackState(item.pickCode, result)
     showNotice('success', `已移除 ${item.displayName || item.name} 的字幕绑定。`)
+    if (builtinPlayerDialog.value && builtinPlayer.value.pickCode === item.pickCode) {
+      builtinPlayer.value = {
+        ...builtinPlayer.value,
+        subtitleUrl: '',
+        subtitleName: '',
+        subtitlePath: '',
+        subtitleType: '',
+        subtitleUsable: false,
+      }
+    }
   } catch (error) {
     showError(error, '清除字幕失败')
   } finally {
@@ -1617,6 +1805,12 @@ function handleKeydown(event) {
     return
   }
 
+  if (event.key === 'Escape' && builtinPlayerDialog.value) {
+    event.preventDefault()
+    closeBuiltinPlayer()
+    return
+  }
+
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f' && activeSection.value === 'files') {
     event.preventDefault()
     openSearchInput()
@@ -1658,6 +1852,24 @@ function createEmptyOfflineState() {
     failedCount: 0,
     completedCount: 0,
     tasks: [],
+  }
+}
+
+function createEmptyBuiltinPlayer() {
+  return {
+    pickCode: '',
+    rowKey: '',
+    title: '',
+    url: '',
+    startMs: 0,
+    resumeUsed: false,
+    subtitleUrl: '',
+    subtitleName: '',
+    subtitlePath: '',
+    subtitleType: '',
+    subtitleUsable: false,
+    currentMs: 0,
+    ended: false,
   }
 }
 
@@ -3451,6 +3663,14 @@ function sleep(ms) {
                 <v-btn
                   variant="tonal"
                   block
+                  prepend-icon="mdi-monitor-play"
+                  @click="openBuiltinPlayer(selectedItem)"
+                >
+                  内置播放
+                </v-btn>
+                <v-btn
+                  variant="tonal"
+                  block
                   prepend-icon="mdi-replay"
                   @click="playVideo(selectedItem, { fromStart: true })"
                 >
@@ -3740,6 +3960,90 @@ function sleep(ms) {
       </v-card>
     </v-dialog>
 
+    <v-dialog
+      v-model="builtinPlayerDialog"
+      max-width="980"
+      persistent
+    >
+      <v-card class="builtin-player-card">
+        <div class="builtin-player-header">
+          <div class="min-w-0">
+            <div class="text-subtitle-1 font-weight-medium text-truncate">
+              {{ builtinPlayer.title || 'PanPlayer 115' }}
+            </div>
+            <div class="builtin-player-meta">
+              <v-chip
+                v-if="builtinPlayer.resumeUsed && builtinPlayer.startMs > 0"
+                size="x-small"
+                color="primary"
+                variant="tonal"
+              >
+                {{ formatDurationMs(builtinPlayer.startMs) }}
+              </v-chip>
+              <v-chip
+                v-if="builtinPlayer.subtitleName"
+                size="x-small"
+                :color="builtinPlayer.subtitleUsable ? 'teal' : 'warning'"
+                variant="tonal"
+              >
+                {{ builtinPlayer.subtitleName }}
+              </v-chip>
+            </div>
+          </div>
+          <v-btn icon="mdi-close" variant="text" size="small" @click="closeBuiltinPlayer" />
+        </div>
+
+        <v-divider />
+
+        <v-card-text class="builtin-player-body">
+          <div v-if="builtinPlayerLoading" class="builtin-player-loading">
+            <v-progress-circular indeterminate color="primary" />
+          </div>
+          <media-player
+            v-else-if="builtinPlayer.url"
+            ref="builtinPlayerElement"
+            class="builtin-media-player"
+            :src="builtinPlayer.url"
+            :title="builtinPlayer.title"
+            :text-tracks.prop="builtinTextTracks"
+            view-type="video"
+            stream-type="on-demand"
+            preload="metadata"
+            crossorigin
+            playsinline
+            @can-play="handleBuiltinCanPlay"
+            @time-update="handleBuiltinTimeUpdate"
+            @ended="handleBuiltinEnded"
+            @error="handleBuiltinError"
+          >
+            <media-outlet />
+            <media-community-skin />
+          </media-player>
+        </v-card-text>
+
+        <v-card-actions>
+          <v-btn
+            variant="text"
+            prepend-icon="mdi-subtitles-outline"
+            @click="chooseSubtitle(selectedItem)"
+          >
+            选择字幕
+          </v-btn>
+          <v-spacer />
+          <v-btn
+            variant="text"
+            prepend-icon="mdi-open-in-new"
+            @click="playExternalFromBuiltin"
+          >
+            外部播放器
+          </v-btn>
+          <v-btn color="primary" variant="flat" @click="closeBuiltinPlayer">
+            关闭
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-dialog v-model="jumpDialogVisible" max-width="420">
       <v-card>
         <v-card-title>跳转播放</v-card-title>
@@ -3783,6 +4087,49 @@ function sleep(ms) {
   height: 100%;
   min-height: 0;
   overflow: hidden;
+}
+
+.builtin-player-card {
+  overflow: hidden;
+}
+
+.builtin-player-header {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.builtin-player-meta {
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.builtin-player-body {
+  padding: 0 !important;
+  background: #050505;
+}
+
+.builtin-player-loading {
+  height: min(62vh, 540px);
+  min-height: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.builtin-media-player {
+  width: 100%;
+  height: min(62vh, 540px);
+  min-height: 320px;
+  background: #050505;
+  --media-brand: rgb(var(--v-theme-primary));
+  --media-focus-ring-color: rgba(var(--v-theme-primary), 0.72);
 }
 
 .sidebar {

@@ -228,28 +228,8 @@ func (a *App) PlayFile(req PlayRequest) (*PlayResult, error) {
 		return nil, errors.New("缺少 pickcode，无法播放")
 	}
 
-	startMS := req.StartMS
-	if req.FromStart {
-		startMS = 0
-	} else if startMS <= 0 {
-		startMS = record.LastPositionMS
-	}
-	if req.FromStart || req.StartMS > 0 {
-		if err := a.upsertPlaybackRecord(req.PickCode, func(playback *config.PlaybackRecord) bool {
-			if strings.TrimSpace(req.Name) != "" {
-				playback.FileName = req.Name
-			}
-			if req.FromStart {
-				playback.LastPositionMS = 0
-				return strings.TrimSpace(playback.SubtitlePath) != ""
-			}
-			playback.LastPositionMS = startMS
-			playback.LastPlayedAt = time.Now().Format(time.RFC3339)
-			return playback.LastPositionMS > 0 || strings.TrimSpace(playback.SubtitlePath) != ""
-		}); err != nil {
-			a.logger.Warn("failed to pre-save playback state", "pickcode", req.PickCode, "error", err)
-		}
-	}
+	startMS := a.resolveStartPosition(req, record)
+	a.preSavePlaybackStart(req, startMS)
 
 	subtitlePath := a.prepareSubtitlePath(req.PickCode, a.selectedSubtitlePath(req.PickCode, req.Subtitle))
 	streamURL := a.proxy.StreamURL(req.PickCode, req.Name)
@@ -289,6 +269,65 @@ func (a *App) PlayFile(req PlayRequest) (*PlayResult, error) {
 		Subtitle:      subtitlePath,
 		ManagedResume: result.SupportsManagedResume(),
 	}, nil
+}
+
+func (a *App) PrepareBuiltinPlayback(req PlayRequest) (*BuiltinPlaybackSource, error) {
+	req, record := a.normalizePlayRequest(req)
+	if req.PickCode == "" {
+		return nil, errors.New("缺少 pickcode，无法播放")
+	}
+
+	startMS := a.resolveStartPosition(req, record)
+	a.preSavePlaybackStart(req, startMS)
+
+	subtitlePath := a.prepareSubtitlePath(req.PickCode, a.selectedSubtitlePath(req.PickCode, req.Subtitle))
+	streamURL := a.proxy.StreamURL(req.PickCode, req.Name)
+
+	if err := a.proxy.Probe(req.PickCode, req.Name); err != nil {
+		a.logger.Error("stream probe failed", "pickcode", req.PickCode, "name", req.Name, "error", err)
+		return nil, err
+	}
+
+	result := &BuiltinPlaybackSource{
+		URL:        streamURL,
+		Title:      req.Name,
+		StartMS:    startMS,
+		ResumeUsed: !req.FromStart && req.StartMS <= 0 && startMS > 0,
+	}
+
+	if subtitlePath != "" {
+		result.SubtitlePath = subtitlePath
+		result.SubtitleName = filepath.Base(subtitlePath)
+		subtitleURL, subtitleType, ok := a.proxy.SubtitleURL(subtitlePath)
+		result.SubtitleURL = subtitleURL
+		result.SubtitleType = subtitleType
+		result.SubtitleUsable = ok
+	}
+
+	return result, nil
+}
+
+func (a *App) SavePlaybackProgress(pickCode, name string, positionMS int64) (*PlaybackStateView, error) {
+	pickCode = strings.TrimSpace(pickCode)
+	if pickCode == "" {
+		return nil, errors.New("缺少 pickcode")
+	}
+	if positionMS < 0 {
+		positionMS = 0
+	}
+
+	if err := a.upsertPlaybackRecord(pickCode, func(record *config.PlaybackRecord) bool {
+		if strings.TrimSpace(name) != "" {
+			record.FileName = strings.TrimSpace(name)
+		}
+		record.LastPositionMS = positionMS
+		record.LastPlayedAt = time.Now().Format(time.RFC3339)
+		return record.LastPositionMS > 0 || strings.TrimSpace(record.SubtitlePath) != ""
+	}); err != nil {
+		return nil, err
+	}
+
+	return a.playbackStateView(pickCode), nil
 }
 
 func (a *App) SelectPlayerPath(playerID string) (*SettingsView, error) {
@@ -614,6 +653,37 @@ func normalizeAppSettings(settings config.Settings) config.Settings {
 		}
 	}
 	return settings
+}
+
+func (a *App) resolveStartPosition(req PlayRequest, record config.PlaybackRecord) int64 {
+	if req.FromStart {
+		return 0
+	}
+	if req.StartMS > 0 {
+		return req.StartMS
+	}
+	return record.LastPositionMS
+}
+
+func (a *App) preSavePlaybackStart(req PlayRequest, startMS int64) {
+	if !req.FromStart && req.StartMS <= 0 {
+		return
+	}
+
+	if err := a.upsertPlaybackRecord(req.PickCode, func(playback *config.PlaybackRecord) bool {
+		if strings.TrimSpace(req.Name) != "" {
+			playback.FileName = req.Name
+		}
+		if req.FromStart {
+			playback.LastPositionMS = 0
+			return strings.TrimSpace(playback.SubtitlePath) != ""
+		}
+		playback.LastPositionMS = startMS
+		playback.LastPlayedAt = time.Now().Format(time.RFC3339)
+		return playback.LastPositionMS > 0 || strings.TrimSpace(playback.SubtitlePath) != ""
+	}); err != nil {
+		a.logger.Warn("failed to pre-save playback state", "pickcode", req.PickCode, "error", err)
+	}
 }
 
 func buildDirectoryTargetViews(targets []config.DirectoryTarget) []DirectoryTargetView {

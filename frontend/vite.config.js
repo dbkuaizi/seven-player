@@ -3,7 +3,16 @@ import vue from '@vitejs/plugin-vue'
 import wails from '@wailsio/runtime/plugins/vite'
 
 export default defineConfig({
-  plugins: [vue(), wails('./bindings')],
+  plugins: [
+    vue({
+      template: {
+        compilerOptions: {
+          isCustomElement: (tag) => tag.startsWith('media-'),
+        },
+      },
+    }),
+    wails('./bindings'),
+  ],
   build: {
     outDir: 'dist',
     emptyOutDir: true,

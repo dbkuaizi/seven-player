@@ -132,6 +132,16 @@ export function PlayFile(req) {
 }
 
 /**
+ * @param {$models.PlayRequest} req
+ * @returns {$CancellablePromise<$models.BuiltinPlaybackSource | null>}
+ */
+export function PrepareBuiltinPlayback(req) {
+    return $Call.ByID(3852339662, req).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType15($result);
+    }));
+}
+
+/**
  * @param {string} dirID
  * @returns {$CancellablePromise<pan$0.DirectoryView | null>}
  */
@@ -165,6 +175,18 @@ export function SaveFileListDensity(value) {
 export function SaveHideSmallFilesEnabled(enabled) {
     return $Call.ByID(609920859, enabled).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType9($result);
+    }));
+}
+
+/**
+ * @param {string} pickCode
+ * @param {string} name
+ * @param {number} positionMS
+ * @returns {$CancellablePromise<$models.PlaybackStateView | null>}
+ */
+export function SavePlaybackProgress(pickCode, name, positionMS) {
+    return $Call.ByID(3783574330, pickCode, name, positionMS).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType7($result);
     }));
 }
 
@@ -228,7 +250,7 @@ export function SaveSmallFileFilterMB(value) {
  */
 export function SearchFiles(keyword, offset, limit) {
     return $Call.ByID(3203090108, keyword, offset, limit).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType15($result);
+        return $$createType17($result);
     }));
 }
 
@@ -264,7 +286,7 @@ export function SelectTorrentFileAsMagnet() {
  */
 export function StartQRCodeLogin() {
     return $Call.ByID(2084241698).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType17($result);
+        return $$createType19($result);
     }));
 }
 
@@ -283,7 +305,9 @@ const $$createType10 = pan$0.DirectoryView.createFrom;
 const $$createType11 = $Create.Nullable($$createType10);
 const $$createType12 = $models.PlayResult.createFrom;
 const $$createType13 = $Create.Nullable($$createType12);
-const $$createType14 = pan$0.SearchResultView.createFrom;
+const $$createType14 = $models.BuiltinPlaybackSource.createFrom;
 const $$createType15 = $Create.Nullable($$createType14);
-const $$createType16 = pan$0.LoginSessionView.createFrom;
+const $$createType16 = pan$0.SearchResultView.createFrom;
 const $$createType17 = $Create.Nullable($$createType16);
+const $$createType18 = pan$0.LoginSessionView.createFrom;
+const $$createType19 = $Create.Nullable($$createType18);

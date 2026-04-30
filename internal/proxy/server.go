@@ -9,9 +9,13 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	driver "github.com/jianxcao/115driver/pkg/driver"
 )
 
@@ -21,18 +25,26 @@ type downloadProvider interface {
 }
 
 type Server struct {
-	provider downloadProvider
-	logger   *slog.Logger
-	server   *http.Server
-	listener net.Listener
-	baseURL  string
-	client   *http.Client
+	provider   downloadProvider
+	logger     *slog.Logger
+	server     *http.Server
+	listener   net.Listener
+	baseURL    string
+	client     *http.Client
+	subtitleMu sync.RWMutex
+	subtitles  map[string]subtitleEntry
+}
+
+type subtitleEntry struct {
+	path string
+	typ  string
 }
 
 func NewServer(provider downloadProvider, logger *slog.Logger) *Server {
 	return &Server{
-		provider: provider,
-		logger:   logger,
+		provider:  provider,
+		logger:    logger,
+		subtitles: map[string]subtitleEntry{},
 		client: &http.Client{
 			Timeout: 0,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -55,6 +67,7 @@ func (s *Server) Start() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/stream", s.handleStream)
 	mux.HandleFunc("/avatar", s.handleAvatar)
+	mux.HandleFunc("/subtitle", s.handleSubtitle)
 	mux.HandleFunc("/healthz", s.handleHealth)
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -96,6 +109,35 @@ func (s *Server) StreamURL(pickCode, name string) string {
 	return fmt.Sprintf("%s/stream?%s", s.baseURL, query.Encode())
 }
 
+func (s *Server) SubtitleURL(path string) (string, string, bool) {
+	path = strings.TrimSpace(path)
+	if path == "" || s.baseURL == "" {
+		return "", "", false
+	}
+
+	resolved, err := filepath.Abs(path)
+	if err != nil {
+		return "", "", false
+	}
+
+	typ, ok := subtitleType(resolved)
+	if !ok {
+		return "", "", false
+	}
+
+	token := uuid.NewString()
+	s.subtitleMu.Lock()
+	s.subtitles[token] = subtitleEntry{
+		path: resolved,
+		typ:  typ,
+	}
+	s.subtitleMu.Unlock()
+
+	query := url.Values{}
+	query.Set("token", token)
+	return fmt.Sprintf("%s/subtitle?%s", s.baseURL, query.Encode()), typ, true
+}
+
 func (s *Server) Probe(pickCode, name string) error {
 	if strings.TrimSpace(pickCode) == "" {
 		return errors.New("缺少 pickcode")
@@ -127,11 +169,17 @@ func (s *Server) Probe(pickCode, name string) error {
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
+	allowProxyCORS(w)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, _ = io.WriteString(w, `{"ok":true}`)
 }
 
 func (s *Server) handleAvatar(w http.ResponseWriter, r *http.Request) {
+	allowProxyCORS(w)
+	if r.Method == http.MethodOptions {
+		return
+	}
+
 	rawURL := strings.TrimSpace(r.URL.Query().Get("url"))
 	if rawURL == "" {
 		http.Error(w, "missing url", http.StatusBadRequest)
@@ -206,6 +254,11 @@ func (s *Server) handleAvatar(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
+	allowProxyCORS(w)
+	if r.Method == http.MethodOptions {
+		return
+	}
+
 	pickCode := strings.TrimSpace(r.URL.Query().Get("pickcode"))
 	if pickCode == "" {
 		http.Error(w, "missing pickcode", http.StatusBadRequest)
@@ -280,4 +333,69 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, _ = io.Copy(w, resp.Body)
+}
+
+func (s *Server) handleSubtitle(w http.ResponseWriter, r *http.Request) {
+	allowProxyCORS(w)
+	if r.Method == http.MethodOptions {
+		return
+	}
+
+	token := strings.TrimSpace(r.URL.Query().Get("token"))
+	if token == "" {
+		http.Error(w, "missing token", http.StatusBadRequest)
+		return
+	}
+
+	s.subtitleMu.RLock()
+	entry, ok := s.subtitles[token]
+	s.subtitleMu.RUnlock()
+	if !ok {
+		http.Error(w, "subtitle not found", http.StatusNotFound)
+		return
+	}
+
+	data, err := os.ReadFile(entry.path)
+	if err != nil {
+		s.logger.Error("subtitle proxy failed to read file", "path", entry.path, "error", err)
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", subtitleContentType(entry.typ))
+	w.WriteHeader(http.StatusOK)
+	if r.Method == http.MethodHead {
+		return
+	}
+	_, _ = w.Write(data)
+}
+
+func subtitleType(path string) (string, bool) {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".vtt":
+		return "vtt", true
+	case ".srt":
+		return "srt", true
+	case ".ass":
+		return "ass", true
+	case ".ssa":
+		return "ssa", true
+	default:
+		return "", false
+	}
+}
+
+func subtitleContentType(typ string) string {
+	if typ == "vtt" {
+		return "text/vtt; charset=utf-8"
+	}
+	return "text/plain; charset=utf-8"
+}
+
+func allowProxyCORS(w http.ResponseWriter) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Range, Content-Type")
+	w.Header().Set("Access-Control-Expose-Headers", "Accept-Ranges, Content-Length, Content-Range, Content-Type")
 }

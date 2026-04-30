@@ -7,6 +7,12 @@ import App from './App.vue'
 import './main.css'
 import 'vuetify/styles'
 import '@mdi/font/css/materialdesignicons.css'
+import 'vidstack/styles/base.css'
+import 'vidstack/styles/defaults.css'
+import 'vidstack/styles/community-skin/video.css'
+import 'vidstack/define/media-player.js'
+import 'vidstack/define/media-outlet.js'
+import 'vidstack/define/media-community-skin.js'
 
 const vuetify = createVuetify({
   components,

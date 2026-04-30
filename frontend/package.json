@@ -10,8 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@wailsio/runtime": "latest",
     "@mdi/font": "^7.4.47",
+    "@wailsio/runtime": "latest",
+    "vidstack": "^0.6.15",
     "vue": "^3.5.22",
     "vuetify": "^3.12.5"
   },

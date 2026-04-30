@@ -33,6 +33,18 @@ type PlayResult struct {
 	ManagedResume bool   `json:"managedResume"`
 }
 
+type BuiltinPlaybackSource struct {
+	URL            string `json:"url"`
+	Title          string `json:"title"`
+	StartMS        int64  `json:"startMs"`
+	ResumeUsed     bool   `json:"resumeUsed"`
+	SubtitleURL    string `json:"subtitleUrl,omitempty"`
+	SubtitleName   string `json:"subtitleName,omitempty"`
+	SubtitlePath   string `json:"subtitlePath,omitempty"`
+	SubtitleType   string `json:"subtitleType,omitempty"`
+	SubtitleUsable bool   `json:"subtitleUsable"`
+}
+
 type PlaybackStateView struct {
 	PickCode     string `json:"pickCode"`
 	ResumeMS     int64  `json:"resumeMs"`

@@ -134,6 +134,90 @@ export class BootstrapResult {
     }
 }
 
+export class BuiltinPlaybackSource {
+    /**
+     * Creates a new BuiltinPlaybackSource instance.
+     * @param {Partial<BuiltinPlaybackSource>} [$$source = {}] - The source object to create the BuiltinPlaybackSource.
+     */
+    constructor($$source = {}) {
+        if (!("url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["url"] = "";
+        }
+        if (!("title" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["title"] = "";
+        }
+        if (!("startMs" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["startMs"] = 0;
+        }
+        if (!("resumeUsed" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["resumeUsed"] = false;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["subtitleUrl"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["subtitleName"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["subtitlePath"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["subtitleType"] = undefined;
+        }
+        if (!("subtitleUsable" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["subtitleUsable"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new BuiltinPlaybackSource instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {BuiltinPlaybackSource}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new BuiltinPlaybackSource(/** @type {Partial<BuiltinPlaybackSource>} */($$parsedSource));
+    }
+}
+
 export class DeleteOfflineRequest {
     /**
      * Creates a new DeleteOfflineRequest instance.
