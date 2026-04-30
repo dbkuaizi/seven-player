@@ -10,7 +10,7 @@ version: "0.1.0"
 section: "default"
 priority: "extra"
 maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
-description: "A desktop player for 115 cloud drive media"
+description: "PanPlayer 115"
 vendor: "OpenAI Codex"
 homepage: "https://wails.io"
 license: "MIT"

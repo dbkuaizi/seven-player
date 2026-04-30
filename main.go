@@ -24,7 +24,7 @@ func main() {
 
 	app := application.New(application.Options{
 		Name:        "PanPlayer 115",
-		Description: "115 cloud drive desktop player",
+		Description: "PanPlayer 115",
 		Logger:      logger,
 		Services: []application.Service{
 			application.NewService(service),

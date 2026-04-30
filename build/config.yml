@@ -8,7 +8,7 @@ info:
   companyName: "OpenAI Codex" # The name of the company
   productName: "PanPlayer 115" # The name of the application
   productIdentifier: "com.panplayer.panplayer115" # The unique product identifier
-  description: "A desktop player for 115 cloud drive media" # The application description
+  description: "PanPlayer 115" # The application description
   copyright: "(c) 2026, OpenAI Codex" # Copyright text
   comments: "PanPlayer 115" # Comments
   version: "0.1.0" # The application version
