@@ -2,7 +2,10 @@
   web_trigger_build_macos_arm64:
     - name: Build macOS ARM64
       runner:
-        tags: $CNB_MACOS_RUNNER_TAGS
+        tags:
+          - cnb:arch:arm64:v8
+          - $CNB_MACOS_RUNNER_TAGS
+        cpus: 8
       env:
         CNB_MACOS_RUNNER_TAGS: macos-arm64
         WAILS_VERSION: v2.12.0
@@ -21,7 +24,10 @@
   tag_push:
     - name: Release macOS ARM64
       runner:
-        tags: macos-arm64
+        tags:
+          - cnb:arch:arm64:v8
+          - macos-arm64
+        cpus: 8
       env:
         WAILS_VERSION: v2.12.0
         OUTPUT_ZIP: dist/PanPlayer115-darwin-arm64.zip
