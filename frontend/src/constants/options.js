@@ -1,6 +1,5 @@
 export const navigationItems = [
   { value: 'files', label: '文件管理', icon: 'mdi-folder-outline' },
-  { value: 'library', label: '影视库', icon: 'mdi-view-dashboard-outline' },
   { value: 'downloads', label: '云下载', icon: 'mdi-download-circle-outline' },
   { value: 'settings', label: '系统设置', icon: 'mdi-cog-outline' },
 ]

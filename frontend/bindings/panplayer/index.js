@@ -13,12 +13,8 @@ export {
     BuiltinPlaybackSource,
     DeleteOfflineRequest,
     DirectoryTargetView,
-    LibraryPlayRequest,
-    LibrarySnapshotView,
-    LibraryTitleDetailView,
     PlayRequest,
     PlayResult,
     PlaybackStateView,
-    ScrapeJobStatusView,
     SettingsView
 } from "./models.js";

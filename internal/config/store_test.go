@@ -31,9 +31,6 @@ func TestStoreRoundTrip(t *testing.T) {
 					},
 				},
 			},
-			ScraperSources:      []string{"tmdb", "douban"},
-			ScraperLanguage:     "zh-CN",
-			TMDBReadAccessToken: "tmdb-demo-token",
 		},
 		Credential: &Credential{
 			UID:  "u",
@@ -85,12 +82,6 @@ func TestStoreRoundTrip(t *testing.T) {
 	}
 	if len(got.Settings.OfflineRecentTargets) != 1 || got.Settings.OfflineRecentTargets[0].ID != "100" {
 		t.Fatalf("OfflineRecentTargets mismatch: %+v", got.Settings.OfflineRecentTargets)
-	}
-	if len(got.Settings.ScraperSources) != 2 || got.Settings.ScraperSources[0] != "tmdb" {
-		t.Fatalf("ScraperSources mismatch: %+v", got.Settings.ScraperSources)
-	}
-	if got.Settings.TMDBReadAccessToken != "tmdb-demo-token" {
-		t.Fatalf("TMDBReadAccessToken mismatch: got %q", got.Settings.TMDBReadAccessToken)
 	}
 	if got.LastDirectoryID != want.LastDirectoryID {
 		t.Fatalf("LastDirectoryID mismatch: got %q want %q", got.LastDirectoryID, want.LastDirectoryID)

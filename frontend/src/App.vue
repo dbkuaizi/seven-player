@@ -13,19 +13,15 @@ import {
   ClearPlaybackProgress,
   ClearSubtitlePath,
   DeleteOfflineTasks,
-  GetScraperStatus,
   ListDirectory,
   ListOfflineTasks,
-  PauseScraper,
   PlayFile,
   PrepareBuiltinPlayback,
   PreviewDirectory,
-  ResolveLibraryPlayRequest,
   SavePlaybackProgress,
   SearchFiles,
   SelectSubtitlePath,
   SelectTorrentFileAsMagnet,
-  StartScraper,
 } from "../bindings/panplayer/app";
 import { Clipboard } from "@wailsio/runtime";
 import AppSidebar from "./components/app/AppSidebar.vue";
@@ -53,7 +49,6 @@ import { useAccountSummary } from "./composables/useAccountSummary";
 import { useLoginSession } from "./composables/useLoginSession";
 import { useNotice } from "./composables/useNotice";
 import { useSettingsState } from "./composables/useSettingsState";
-import MediaLibraryPage from "./pages/MediaLibraryPage.vue";
 import {
   createDirectoryTarget,
   createOfflineTargetOption,
@@ -98,8 +93,6 @@ const downloadLoading = ref(false);
 const downloadSubmitting = ref(false);
 const folderPickerLoading = ref(false);
 const torrentSelecting = ref(false);
-const scraperStatus = ref(null);
-const scraperPollingTimer = ref(null);
 
 const loggedIn = ref(false);
 const user = ref(null);
@@ -163,8 +156,6 @@ const {
   onLoggedOut: () => {
     searchQuery.value = "";
     downloadState.value = createEmptyOfflineState();
-    scraperStatus.value = null;
-    stopScraperPolling();
     resetDirectoryState();
   },
 });
@@ -179,8 +170,6 @@ const {
   saveShowTitleBadges,
   saveSmallFileFilter,
   saveFileListDensity,
-  saveScraperDirectories,
-  saveScraperSettings,
   choosePlayerPath,
   selectPlayerFromList,
   togglePlayerDisabled,
@@ -443,11 +432,6 @@ const downloadQuotaText = computed(() => {
   return `${Math.max(0, Number(downloadState.value?.quota || 0))} / ${downloadQuotaCapacity.value}`;
 });
 
-const scraperRunning = computed(() => {
-  const status = scraperStatus.value?.status;
-  return status === "running" || status === "queued";
-});
-
 const downloadPaginationSummaryText = computed(() => {
   const total = filteredDownloadTasks.value.length;
   if (!total) {
@@ -597,7 +581,6 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   clearPolling();
-  stopScraperPolling();
   clearSearchDebounce();
   window.removeEventListener("keydown", handleKeydown);
 });
@@ -614,16 +597,11 @@ async function bootstrapApp() {
     currentDir.value = boot?.currentId || "0";
 
     if (loggedIn.value) {
-      await loadScraperStatus();
       await loadDirectory(currentDir.value || "0", {}, 1);
     } else {
-      scraperStatus.value = null;
-      stopScraperPolling();
       resetDirectoryState();
     }
   } catch (error) {
-    scraperStatus.value = null;
-    stopScraperPolling();
     resetDirectoryState();
     showError(error, "初始化失败");
   } finally {
@@ -1557,111 +1535,6 @@ async function openOfflineDirectory(task) {
   await loadDirectory(task.dirId, {}, 1);
 }
 
-async function startScraperTask() {
-  actionLoading.value = true;
-  try {
-    const status = await StartScraper();
-    scraperStatus.value = status;
-    if (status?.status === "running") {
-      startScraperPolling();
-      showNotice("success", status.message || "已开始刮削影视库。");
-      activeSection.value = "library";
-      return;
-    }
-    const latest = await GetScraperStatus();
-    scraperStatus.value = latest;
-    showNotice("info", latest?.message || "刮削任务已更新。");
-  } catch (error) {
-    showError(error, "启动刮削失败");
-  } finally {
-    actionLoading.value = false;
-  }
-}
-
-async function loadScraperStatus() {
-  scraperStatus.value = await GetScraperStatus();
-  if (scraperRunning.value) {
-    startScraperPolling();
-  } else {
-    stopScraperPolling();
-  }
-}
-
-function startScraperPolling() {
-  stopScraperPolling();
-  scraperPollingTimer.value = window.setInterval(async () => {
-    try {
-      const status = await GetScraperStatus();
-      scraperStatus.value = status;
-      if (
-        !status ||
-        (status.status !== "running" && status.status !== "queued")
-      ) {
-        stopScraperPolling();
-      }
-    } catch (error) {
-      stopScraperPolling();
-      showError(error, "读取刮削状态失败");
-    }
-  }, 2000);
-}
-
-function stopScraperPolling() {
-  if (scraperPollingTimer.value) {
-    window.clearInterval(scraperPollingTimer.value);
-    scraperPollingTimer.value = null;
-  }
-}
-
-async function pauseScraperTask() {
-  actionLoading.value = true;
-  try {
-    const status = await PauseScraper();
-    scraperStatus.value = status;
-    stopScraperPolling();
-    showNotice("info", status?.message || "刮削已暂停。");
-  } catch (error) {
-    showError(error, "暂停刮削失败");
-  } finally {
-    actionLoading.value = false;
-  }
-}
-
-async function playLibraryItem(payload) {
-  if (!payload?.titleId) {
-    return;
-  }
-
-  actionLoading.value = true;
-  try {
-    const request = await ResolveLibraryPlayRequest({
-      titleId: payload.titleId,
-      fileId: payload.fileId || "",
-      startMs: payload.startMs || 0,
-    });
-    if (!request?.pickCode) {
-      showNotice("warning", "当前影视条目没有可播放文件。");
-      return;
-    }
-    await playVideo(
-      {
-        isVideo: true,
-        pickCode: request.pickCode,
-        name: request.name,
-        subtitlePath: "",
-        resumeMs: request.startMs || 0,
-      },
-      {
-        startMs: payload.startMs || 0,
-      },
-    );
-  } catch (error) {
-    showError(error, "启动影视库播放失败");
-  } finally {
-    actionLoading.value = false;
-  }
-}
-
 function openFolderPicker() {
   folderPickerDialog.value = true;
   loadFolderPicker(offlineTargetDir.value?.id || currentDir.value || "0");
@@ -1865,15 +1738,6 @@ function sleep(ms) {
               @page-change="handlePageChange"
             />
 
-            <MediaLibraryPage
-              v-else-if="activeSection === 'library'"
-              :scraper-status="scraperStatus"
-              :scraper-action-loading="actionLoading"
-              @play="playLibraryItem"
-              @start-scraper="startScraperTask"
-              @pause-scraper="pauseScraperTask"
-            />
-
             <DownloadsPage
               v-else-if="activeSection === 'downloads'"
               v-model:download-filter="downloadFilter"
@@ -1909,16 +1773,10 @@ function sleep(ms) {
               :settings="settings"
               :player-options="playerOptions"
               :player-loading="playerLoading"
-              :scraper-status="scraperStatus"
-              :scraper-action-loading="actionLoading"
               @select-player="selectPlayerFromList"
               @choose-player-path="choosePlayerPath"
               @toggle-player-disabled="togglePlayerDisabled"
               @delete-player="deletePlayer"
-              @save-scraper-directories="saveScraperDirectories"
-              @save-scraper-settings="saveScraperSettings"
-              @start-scraper="startScraperTask"
-              @pause-scraper="pauseScraperTask"
             />
           </template>
 

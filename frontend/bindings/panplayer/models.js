@@ -8,9 +8,6 @@ import { Create as $Create } from "@wailsio/runtime";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import * as library$0 from "./internal/library/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as pan$0 from "./internal/pan/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -299,60 +296,6 @@ export class DirectoryTargetView {
     }
 }
 
-export class LibraryPlayRequest {
-    /**
-     * Creates a new LibraryPlayRequest instance.
-     * @param {Partial<LibraryPlayRequest>} [$$source = {}] - The source object to create the LibraryPlayRequest.
-     */
-    constructor($$source = {}) {
-        if (!("titleId" in $$source)) {
-            /**
-             * @member
-             * @type {string}
-             */
-            this["titleId"] = "";
-        }
-        if (!("fileId" in $$source)) {
-            /**
-             * @member
-             * @type {string}
-             */
-            this["fileId"] = "";
-        }
-        if (!("startMs" in $$source)) {
-            /**
-             * @member
-             * @type {number}
-             */
-            this["startMs"] = 0;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new LibraryPlayRequest instance from a string or object.
-     * @param {any} [$$source = {}]
-     * @returns {LibraryPlayRequest}
-     */
-    static createFrom($$source = {}) {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new LibraryPlayRequest(/** @type {Partial<LibraryPlayRequest>} */($$parsedSource));
-    }
-}
-
-export const LibrarySnapshotView = library$0.LibrarySnapshot;
-
-/**
- * @typedef {library$0.LibrarySnapshot} LibrarySnapshotView
- */
-
-export const LibraryTitleDetailView = library$0.TitleDetail;
-
-/**
- * @typedef {library$0.TitleDetail} LibraryTitleDetailView
- */
-
 export class PlayRequest {
     /**
      * Creates a new PlayRequest instance.
@@ -542,12 +485,6 @@ export class PlaybackStateView {
     }
 }
 
-export const ScrapeJobStatusView = library$0.ScrapeJobStatus;
-
-/**
- * @typedef {library$0.ScrapeJobStatus} ScrapeJobStatusView
- */
-
 export class SettingsView {
     /**
      * Creates a new SettingsView instance.
@@ -603,55 +540,6 @@ export class SettingsView {
              */
             this["offlineRecentTargets"] = [];
         }
-        if (!("scraperDirectories" in $$source)) {
-            /**
-             * @member
-             * @type {DirectoryTargetView[]}
-             */
-            this["scraperDirectories"] = [];
-        }
-        if (!("scraperSources" in $$source)) {
-            /**
-             * @member
-             * @type {string[]}
-             */
-            this["scraperSources"] = [];
-        }
-        if (!("scraperLanguage" in $$source)) {
-            /**
-             * @member
-             * @type {string}
-             */
-            this["scraperLanguage"] = "";
-        }
-        if (!("scraperAutoScan" in $$source)) {
-            /**
-             * @member
-             * @type {boolean}
-             */
-            this["scraperAutoScan"] = false;
-        }
-        if (!("scraperOverwrite" in $$source)) {
-            /**
-             * @member
-             * @type {boolean}
-             */
-            this["scraperOverwrite"] = false;
-        }
-        if (!("scraperDownloadImages" in $$source)) {
-            /**
-             * @member
-             * @type {boolean}
-             */
-            this["scraperDownloadImages"] = false;
-        }
-        if (!("tmdbReadAccessToken" in $$source)) {
-            /**
-             * @member
-             * @type {string}
-             */
-            this["tmdbReadAccessToken"] = "";
-        }
 
         Object.assign(this, $$source);
     }
@@ -664,20 +552,12 @@ export class SettingsView {
     static createFrom($$source = {}) {
         const $$createField1_0 = $$createType7;
         const $$createField6_0 = $$createType9;
-        const $$createField7_0 = $$createType9;
-        const $$createField8_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("players" in $$parsedSource) {
             $$parsedSource["players"] = $$createField1_0($$parsedSource["players"]);
         }
         if ("offlineRecentTargets" in $$parsedSource) {
             $$parsedSource["offlineRecentTargets"] = $$createField6_0($$parsedSource["offlineRecentTargets"]);
-        }
-        if ("scraperDirectories" in $$parsedSource) {
-            $$parsedSource["scraperDirectories"] = $$createField7_0($$parsedSource["scraperDirectories"]);
-        }
-        if ("scraperSources" in $$parsedSource) {
-            $$parsedSource["scraperSources"] = $$createField8_0($$parsedSource["scraperSources"]);
         }
         return new SettingsView(/** @type {Partial<SettingsView>} */($$parsedSource));
     }

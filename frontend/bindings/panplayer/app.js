@@ -8,9 +8,6 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import * as library$0 from "./internal/library/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as pan$0 from "./internal/pan/models.js";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -87,34 +84,6 @@ export function DeletePlayerPath(playerID) {
 }
 
 /**
- * @param {string} titleID
- * @returns {$CancellablePromise<$models.LibraryTitleDetailView | null>}
- */
-export function GetLibraryDetail(titleID) {
-    return $Call.ByID(869615043, titleID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType11($result);
-    }));
-}
-
-/**
- * @returns {$CancellablePromise<$models.LibrarySnapshotView | null>}
- */
-export function GetLibrarySnapshot() {
-    return $Call.ByID(3940551486).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType13($result);
-    }));
-}
-
-/**
- * @returns {$CancellablePromise<$models.ScrapeJobStatusView | null>}
- */
-export function GetScraperStatus() {
-    return $Call.ByID(3207301845).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType15($result);
-    }));
-}
-
-/**
  * @param {string} dirID
  * @param {number} offset
  * @param {number} limit
@@ -122,7 +91,7 @@ export function GetScraperStatus() {
  */
 export function ListDirectory(dirID, offset, limit) {
     return $Call.ByID(3882022436, dirID, offset, limit).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType17($result);
+        return $$createType11($result);
     }));
 }
 
@@ -153,21 +122,12 @@ export function Logout() {
 }
 
 /**
- * @returns {$CancellablePromise<$models.ScrapeJobStatusView | null>}
- */
-export function PauseScraper() {
-    return $Call.ByID(1130369861).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType15($result);
-    }));
-}
-
-/**
  * @param {$models.PlayRequest} req
  * @returns {$CancellablePromise<$models.PlayResult | null>}
  */
 export function PlayFile(req) {
     return $Call.ByID(4039908549, req).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType19($result);
+        return $$createType13($result);
     }));
 }
 
@@ -177,7 +137,7 @@ export function PlayFile(req) {
  */
 export function PrepareBuiltinPlayback(req) {
     return $Call.ByID(3852339662, req).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType21($result);
+        return $$createType15($result);
     }));
 }
 
@@ -187,17 +147,7 @@ export function PrepareBuiltinPlayback(req) {
  */
 export function PreviewDirectory(dirID) {
     return $Call.ByID(317703958, dirID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType17($result);
-    }));
-}
-
-/**
- * @param {$models.LibraryPlayRequest} req
- * @returns {$CancellablePromise<$models.PlayRequest | null>}
- */
-export function ResolveLibraryPlayRequest(req) {
-    return $Call.ByID(2178307905, req).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType23($result);
+        return $$createType11($result);
     }));
 }
 
@@ -273,31 +223,6 @@ export function SavePreferredPlayer(playerID) {
 }
 
 /**
- * @param {$models.DirectoryTargetView[]} targets
- * @returns {$CancellablePromise<$models.SettingsView | null>}
- */
-export function SaveScraperDirectories(targets) {
-    return $Call.ByID(3629405465, targets).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType9($result);
-    }));
-}
-
-/**
- * @param {string[]} sources
- * @param {string} language
- * @param {boolean} autoScan
- * @param {boolean} overwrite
- * @param {boolean} downloadImages
- * @param {string} tmdbReadAccessToken
- * @returns {$CancellablePromise<$models.SettingsView | null>}
- */
-export function SaveScraperSettings(sources, language, autoScan, overwrite, downloadImages, tmdbReadAccessToken) {
-    return $Call.ByID(3159247787, sources, language, autoScan, overwrite, downloadImages, tmdbReadAccessToken).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType9($result);
-    }));
-}
-
-/**
  * @param {boolean} enabled
  * @returns {$CancellablePromise<$models.SettingsView | null>}
  */
@@ -325,7 +250,7 @@ export function SaveSmallFileFilterMB(value) {
  */
 export function SearchFiles(keyword, offset, limit) {
     return $Call.ByID(3203090108, keyword, offset, limit).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType25($result);
+        return $$createType17($result);
     }));
 }
 
@@ -361,16 +286,7 @@ export function SelectTorrentFileAsMagnet() {
  */
 export function StartQRCodeLogin() {
     return $Call.ByID(2084241698).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType27($result);
-    }));
-}
-
-/**
- * @returns {$CancellablePromise<$models.ScrapeJobStatusView | null>}
- */
-export function StartScraper() {
-    return $Call.ByID(2080015387).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType15($result);
+        return $$createType19($result);
     }));
 }
 
@@ -385,21 +301,13 @@ const $$createType6 = $models.PlaybackStateView.createFrom;
 const $$createType7 = $Create.Nullable($$createType6);
 const $$createType8 = $models.SettingsView.createFrom;
 const $$createType9 = $Create.Nullable($$createType8);
-const $$createType10 = library$0.TitleDetail.createFrom;
+const $$createType10 = pan$0.DirectoryView.createFrom;
 const $$createType11 = $Create.Nullable($$createType10);
-const $$createType12 = library$0.LibrarySnapshot.createFrom;
+const $$createType12 = $models.PlayResult.createFrom;
 const $$createType13 = $Create.Nullable($$createType12);
-const $$createType14 = library$0.ScrapeJobStatus.createFrom;
+const $$createType14 = $models.BuiltinPlaybackSource.createFrom;
 const $$createType15 = $Create.Nullable($$createType14);
-const $$createType16 = pan$0.DirectoryView.createFrom;
+const $$createType16 = pan$0.SearchResultView.createFrom;
 const $$createType17 = $Create.Nullable($$createType16);
-const $$createType18 = $models.PlayResult.createFrom;
+const $$createType18 = pan$0.LoginSessionView.createFrom;
 const $$createType19 = $Create.Nullable($$createType18);
-const $$createType20 = $models.BuiltinPlaybackSource.createFrom;
-const $$createType21 = $Create.Nullable($$createType20);
-const $$createType22 = $models.PlayRequest.createFrom;
-const $$createType23 = $Create.Nullable($$createType22);
-const $$createType24 = pan$0.SearchResultView.createFrom;
-const $$createType25 = $Create.Nullable($$createType24);
-const $$createType26 = pan$0.LoginSessionView.createFrom;
-const $$createType27 = $Create.Nullable($$createType26);

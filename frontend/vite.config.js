@@ -11,7 +11,7 @@ export default defineConfig({
         },
       },
     }),
-    wails('./bindings'),
+    wails('bindings'),
   ],
   build: {
     outDir: 'dist',

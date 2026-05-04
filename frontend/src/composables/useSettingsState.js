@@ -4,8 +4,6 @@ import {
   SaveFileListDensity,
   SavePlayerDisabled,
   SavePreferredPlayer,
-  SaveScraperDirectories,
-  SaveScraperSettings,
   SaveSmallFileFilterMB,
   SaveShowTitleBadgesEnabled,
   SelectPlayerPath,
@@ -13,11 +11,8 @@ import {
 import {
   createDefaultSettings,
   normalizeFileListDensity,
-  normalizeScraperLanguage,
-  normalizeScraperSources,
   normalizeSettingsView,
 } from '../utils/settings'
-import { normalizeDirectoryTargets } from '../utils/directoryTarget'
 
 export function useSettingsState({ showNotice, showError, refreshFilePresentation }) {
   const settingsTab = ref('player')
@@ -91,45 +86,6 @@ export function useSettingsState({ showNotice, showError, refreshFilePresentatio
     }
   }
 
-  async function saveScraperDirectories(targets) {
-    const nextTargets = normalizeDirectoryTargets(targets, 50)
-
-    try {
-      applySettingsView(await SaveScraperDirectories(nextTargets))
-      showNotice('success', nextTargets.length ? '刮削目录已保存。' : '已恢复为不限制刮削目录。')
-    } catch (error) {
-      showError(error, '保存刮削目录失败')
-    }
-  }
-
-  async function saveScraperSettings(patch = {}) {
-    const current = settings.value || createDefaultSettings()
-    const next = {
-      sources: normalizeScraperSources(patch.sources ?? current.scraperSources),
-      language: normalizeScraperLanguage(patch.language ?? current.scraperLanguage),
-      autoScan: Boolean(patch.autoScan ?? current.scraperAutoScan),
-      overwrite: Boolean(patch.overwrite ?? current.scraperOverwrite),
-      downloadImages: patch.downloadImages ?? current.scraperDownloadImages,
-      tmdbReadAccessToken: String(
-        patch.tmdbReadAccessToken ?? current.tmdbReadAccessToken ?? '',
-      ).trim(),
-    }
-
-    try {
-      applySettingsView(await SaveScraperSettings(
-        next.sources,
-        next.language,
-        next.autoScan,
-        next.overwrite,
-        next.downloadImages !== false,
-        next.tmdbReadAccessToken,
-      ))
-      showNotice('success', '刮削设置已保存。')
-    } catch (error) {
-      showError(error, '保存刮削设置失败')
-    }
-  }
-
   async function choosePlayerPath(playerId = selectedPlayer.value?.id || settings.value?.preferredPlayer || 'mpv') {
     playerLoading.value = true
 
@@ -196,8 +152,6 @@ export function useSettingsState({ showNotice, showError, refreshFilePresentatio
     saveShowTitleBadges,
     saveSmallFileFilter,
     saveFileListDensity,
-    saveScraperDirectories,
-    saveScraperSettings,
     choosePlayerPath,
     selectPlayerFromList,
     togglePlayerDisabled,
