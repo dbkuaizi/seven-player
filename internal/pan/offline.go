@@ -94,10 +94,10 @@ func (s *Service) listOfflineTasksOnce(client *driver.Pan115Client) (*OfflineLis
 	}
 
 	view := &OfflineListView{
-		Quota: firstPage.Quota,
-		Total: firstPage.Total,
 		Tasks: make([]OfflineTaskView, 0, len(rawTasks)),
 	}
+
+	view.Quota, view.Total = normalizeOfflineQuota(firstPage.Quota, firstPage.Total)
 
 	sort.Slice(rawTasks, func(i, j int) bool {
 		if rawTasks[i].AddTime == rawTasks[j].AddTime {
@@ -120,11 +120,23 @@ func (s *Service) listOfflineTasksOnce(client *driver.Pan115Client) (*OfflineLis
 		}
 	}
 
-	if view.Total == 0 {
-		view.Total = int64(len(view.Tasks))
-	}
-
 	return view, nil
+}
+
+func normalizeOfflineQuota(quota, total int64) (int64, int64) {
+	if quota < 0 {
+		quota = 0
+	}
+	if total < 0 {
+		total = 0
+	}
+	if total == 0 {
+		total = quota
+	}
+	if quota > total {
+		total = quota
+	}
+	return quota, total
 }
 
 func runOfflineMutation(action func() error, fallback string) error {

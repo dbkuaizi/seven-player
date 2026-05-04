@@ -40,10 +40,10 @@ func main() {
 
 	service.window = app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:            "PanPlayer 115",
-		Width:            820,
-		Height:           660,
-		MinWidth:         800,
-		MinHeight:        660,
+		Width:            defaultWindowWidth,
+		Height:           defaultWindowHeight,
+		MinWidth:         minWindowWidth,
+		MinHeight:        minWindowHeight,
 		DisableResize:    false,
 		Frameless:        false,
 		BackgroundColour: application.NewRGBA(250, 250, 250, 255),
@@ -52,6 +52,7 @@ func main() {
 		URL:              "/",
 	})
 	service.window.OnWindowEvent(events.Common.WindowRuntimeReady, func(_ *application.WindowEvent) {
+		service.applySavedWindowState()
 		service.window.Show()
 	})
 

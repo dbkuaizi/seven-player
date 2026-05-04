@@ -14,9 +14,13 @@ import (
 	"panplayer/internal/config"
 
 	"github.com/google/uuid"
-	driver "github.com/jianxcao/115driver/pkg/driver"
+driver "github.com/jianxcao/115driver/pkg/driver"
 )
 
+const (
+	fileAPIRetryCount = 2
+	fileAPIRetryDelay = 350 * time.Millisecond
+)
 type UserView struct {
 	UserID      int64  `json:"userId"`
 	UserName    string `json:"userName"`
@@ -275,7 +279,7 @@ func (s *Service) ListDirectory(dirID string, offset, limit int) (*DirectoryView
 	}
 	offset, limit = normalizePageRequest(offset, limit, defaultListPageSize, maxListPageSize)
 
-	result, err := s.listDirectoryPage(client, dirID, offset, limit)
+	result, err := s.listDirectoryPageWithRetry(client, dirID, offset, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -334,6 +338,24 @@ func (s *Service) ListDirectory(dirID string, offset, limit int) (*DirectoryView
 	return view, nil
 }
 
+func (s *Service) listDirectoryPageWithRetry(client *driver.Pan115Client, dirID string, offset, limit int) (*rawFileListResp, error) {
+	var lastErr error
+
+	for attempt := 0; attempt < fileAPIRetryCount; attempt++ {
+		result, err := s.listDirectoryPage(client, dirID, offset, limit)
+		if err == nil {
+			return result, nil
+		}
+
+		lastErr = err
+		if !ShouldRetryTemporaryHTMLResponseError(err) || attempt == fileAPIRetryCount-1 {
+			break
+		}
+		time.Sleep(fileAPIRetryDelay)
+	}
+
+	return nil, normalizeRemoteJSONHTMLError(lastErr, "115 目录接口暂时返回了异常页面，请稍后重试。")
+}
 func (s *Service) DownloadInfo(pickCode string) (*driver.DownloadInfo, error) {
 	client, err := s.authenticatedClient()
 	if err != nil {

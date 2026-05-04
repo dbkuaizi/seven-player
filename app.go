@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"panplayer/internal/config"
+	"panplayer/internal/library"
 	"panplayer/internal/pan"
 	"panplayer/internal/player"
 	"panplayer/internal/proxy"
@@ -23,6 +24,9 @@ type App struct {
 	window application.Window
 
 	store   *config.Store
+	library *library.Repository
+	scraper *library.Scraper
+	resolver *library.MetadataResolver
 	pan     *pan.Service
 	proxy   *proxy.Server
 	started bool
@@ -41,19 +45,33 @@ type BootstrapResult struct {
 }
 
 type SettingsView struct {
-	PreferredPlayer      string                `json:"preferredPlayer"`
-	Players              []player.Status       `json:"players"`
-	ConfigPath           string                `json:"configPath"`
-	ShowTitleBadges      bool                  `json:"showTitleBadges"`
-	SmallFileFilterMB    int                   `json:"smallFileFilterMB"`
-	FileListDensity      string                `json:"fileListDensity"`
-	OfflineRecentTargets []DirectoryTargetView `json:"offlineRecentTargets"`
+	PreferredPlayer       string                `json:"preferredPlayer"`
+	Players               []player.Status       `json:"players"`
+	ConfigPath            string                `json:"configPath"`
+	ShowTitleBadges       bool                  `json:"showTitleBadges"`
+	SmallFileFilterMB     int                   `json:"smallFileFilterMB"`
+	FileListDensity       string                `json:"fileListDensity"`
+	OfflineRecentTargets  []DirectoryTargetView `json:"offlineRecentTargets"`
+	ScraperDirectories    []DirectoryTargetView `json:"scraperDirectories"`
+	ScraperSources        []string              `json:"scraperSources"`
+	ScraperLanguage       string                `json:"scraperLanguage"`
+	ScraperAutoScan       bool                  `json:"scraperAutoScan"`
+	ScraperOverwrite      bool                  `json:"scraperOverwrite"`
+	ScraperDownloadImages bool                  `json:"scraperDownloadImages"`
+	TMDBReadAccessToken   string                `json:"tmdbReadAccessToken"`
 }
 
 type DirectoryTargetView struct {
 	ID   string           `json:"id"`
 	Path []pan.Breadcrumb `json:"path"`
 }
+
+const (
+	defaultWindowWidth  = 820
+	defaultWindowHeight = 660
+	minWindowWidth      = 800
+	minWindowHeight     = 660
+)
 
 func NewApp(logger *slog.Logger) (*App, error) {
 	store, err := config.NewStore("")
@@ -62,11 +80,16 @@ func NewApp(logger *slog.Logger) (*App, error) {
 	}
 
 	panService := pan.NewService()
+	libraryRepo := library.NewRepository(store.DB())
 	proxyServer := proxy.NewServer(panService, logger)
+	scraper := library.NewScraper(logger, panService, libraryRepo)
 
 	return &App{
 		logger: logger,
 		store:  store,
+		library: libraryRepo,
+		scraper: scraper,
+		resolver: library.NewMetadataResolver(),
 		pan:    panService,
 		proxy:  proxyServer,
 		state:  config.DefaultState(),
@@ -89,6 +112,7 @@ func (a *App) startup(ctx context.Context) {
 	if err := a.loadState(); err != nil {
 		a.logger.Error("failed to load state", "error", err)
 	}
+	a.syncResolverSettings()
 
 	if err := a.proxy.Start(); err != nil {
 		a.logger.Error("failed to start media proxy", "error", err)
@@ -115,6 +139,8 @@ func (a *App) startup(ctx context.Context) {
 func (a *App) shutdown(ctx context.Context) {
 	shutdownCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
+
+	a.persistWindowState()
 
 	if err := a.proxy.Close(shutdownCtx); err != nil {
 		a.logger.Warn("failed to stop proxy", "error", err)
@@ -488,6 +514,42 @@ func (a *App) SaveFileListDensity(value string) (*SettingsView, error) {
 	return &view, nil
 }
 
+func (a *App) SaveScraperDirectories(targets []DirectoryTargetView) (*SettingsView, error) {
+	a.mu.Lock()
+	a.state.Settings = normalizeAppSettings(a.state.Settings)
+	a.state.Settings.ScraperDirectories = config.NormalizeDirectoryTargets(directoryTargetViewsToConfig(targets), 50)
+	state := cloneState(a.state)
+	a.mu.Unlock()
+
+	if err := a.store.Save(state); err != nil {
+		return nil, err
+	}
+
+	view := a.settingsView()
+	return &view, nil
+}
+
+func (a *App) SaveScraperSettings(sources []string, language string, autoScan bool, overwrite bool, downloadImages bool, tmdbReadAccessToken string) (*SettingsView, error) {
+	a.mu.Lock()
+	a.state.Settings = normalizeAppSettings(a.state.Settings)
+	a.state.Settings.ScraperSources = config.NormalizeScraperSources(sources)
+	a.state.Settings.ScraperLanguage = config.NormalizeScraperLanguage(language)
+	a.state.Settings.ScraperAutoScan = autoScan
+	a.state.Settings.ScraperOverwrite = overwrite
+	a.state.Settings.ScraperSkipImages = !downloadImages
+	a.state.Settings.TMDBReadAccessToken = strings.TrimSpace(tmdbReadAccessToken)
+	state := cloneState(a.state)
+	a.mu.Unlock()
+
+	if err := a.store.Save(state); err != nil {
+		return nil, err
+	}
+	a.syncResolverSettings()
+
+	view := a.settingsView()
+	return &view, nil
+}
+
 func (a *App) SaveHideSmallFilesEnabled(enabled bool) (*SettingsView, error) {
 	if enabled {
 		return a.SaveSmallFileFilterMB(1)
@@ -572,11 +634,18 @@ func (a *App) settingsView() SettingsView {
 			PlayerPaths:     settings.PlayerPaths,
 			DisabledPlayers: settings.DisabledPlayers,
 		}),
-		ConfigPath:           a.store.Path(),
-		ShowTitleBadges:      !settings.HideTitleBadges,
-		SmallFileFilterMB:    settings.SmallFileFilterMB,
-		FileListDensity:      settings.FileListDensity,
-		OfflineRecentTargets: buildDirectoryTargetViews(settings.OfflineRecentTargets),
+		ConfigPath:            a.store.Path(),
+		ShowTitleBadges:       !settings.HideTitleBadges,
+		SmallFileFilterMB:     settings.SmallFileFilterMB,
+		FileListDensity:       settings.FileListDensity,
+		OfflineRecentTargets:  buildDirectoryTargetViews(settings.OfflineRecentTargets),
+		ScraperDirectories:    buildDirectoryTargetViews(settings.ScraperDirectories),
+		ScraperSources:        cloneStringSlice(settings.ScraperSources),
+		ScraperLanguage:       settings.ScraperLanguage,
+		ScraperAutoScan:       settings.ScraperAutoScan,
+		ScraperOverwrite:      settings.ScraperOverwrite,
+		ScraperDownloadImages: !settings.ScraperSkipImages,
+		TMDBReadAccessToken:   settings.TMDBReadAccessToken,
 	}
 }
 
@@ -614,6 +683,64 @@ func (a *App) persistLoggedInState() {
 	a.syncSessionState()
 }
 
+func (a *App) syncResolverSettings() {
+	if a.resolver == nil {
+		return
+	}
+	a.resolver.SetTMDBReadAccessToken(a.currentSettings().TMDBReadAccessToken)
+}
+
+func (a *App) applySavedWindowState() {
+	if a.window == nil {
+		return
+	}
+
+	a.mu.RLock()
+	saved := a.state.Window
+	a.mu.RUnlock()
+
+	width := saved.Width
+	height := saved.Height
+	if width < minWindowWidth {
+		width = defaultWindowWidth
+	}
+	if height < minWindowHeight {
+		height = defaultWindowHeight
+	}
+
+	a.window.SetSize(width, height)
+	a.window.SetMinSize(minWindowWidth, minWindowHeight)
+	if saved.Maximised {
+		a.window.Maximise()
+	}
+}
+
+func (a *App) persistWindowState() {
+	if a.window == nil {
+		return
+	}
+
+	a.mu.Lock()
+	windowState := a.state.Window
+	windowState.Maximised = a.window.IsMaximised()
+	if !windowState.Maximised {
+		width, height := a.window.Size()
+		if width >= minWindowWidth {
+			windowState.Width = width
+		}
+		if height >= minWindowHeight {
+			windowState.Height = height
+		}
+	}
+	a.state.Window = windowState
+	state := cloneState(a.state)
+	a.mu.Unlock()
+
+	if err := a.store.Save(state); err != nil {
+		a.logger.Warn("failed to persist window state", "error", err)
+	}
+}
+
 func normalizeAppSettings(settings config.Settings) config.Settings {
 	if settings.PlayerPaths == nil {
 		settings.PlayerPaths = map[string]string{}
@@ -623,6 +750,9 @@ func normalizeAppSettings(settings config.Settings) config.Settings {
 	}
 	if settings.OfflineRecentTargets == nil {
 		settings.OfflineRecentTargets = []config.DirectoryTarget{}
+	}
+	if settings.ScraperDirectories == nil {
+		settings.ScraperDirectories = []config.DirectoryTarget{}
 	}
 	if settings.MPVPath != "" && settings.PlayerPaths[player.PlayerMPV] == "" {
 		settings.PlayerPaths[player.PlayerMPV] = settings.MPVPath
@@ -637,6 +767,10 @@ func normalizeAppSettings(settings config.Settings) config.Settings {
 	settings.SmallFileFilterMB = normalizeSmallFileFilterMB(settings.SmallFileFilterMB)
 	settings.FileListDensity = normalizeFileListDensity(settings.FileListDensity)
 	settings.OfflineRecentTargets = config.NormalizeOfflineRecentTargets(settings.OfflineRecentTargets)
+	settings.ScraperDirectories = config.NormalizeDirectoryTargets(settings.ScraperDirectories, 50)
+	settings.ScraperSources = config.NormalizeScraperSources(settings.ScraperSources)
+	settings.ScraperLanguage = config.NormalizeScraperLanguage(settings.ScraperLanguage)
+	settings.TMDBReadAccessToken = strings.TrimSpace(settings.TMDBReadAccessToken)
 	settings.HideSmallFiles = false
 	if settings.DisabledPlayers[settings.PreferredPlayer] {
 		for _, candidate := range []string{
@@ -701,6 +835,28 @@ func buildDirectoryTargetViews(targets []config.DirectoryTarget) []DirectoryTarg
 			})
 		}
 		result = append(result, DirectoryTargetView{
+			ID:   target.ID,
+			Path: path,
+		})
+	}
+	return result
+}
+
+func directoryTargetViewsToConfig(targets []DirectoryTargetView) []config.DirectoryTarget {
+	if len(targets) == 0 {
+		return []config.DirectoryTarget{}
+	}
+
+	result := make([]config.DirectoryTarget, 0, len(targets))
+	for _, target := range targets {
+		path := make([]config.Breadcrumb, 0, len(target.Path))
+		for _, crumb := range target.Path {
+			path = append(path, config.Breadcrumb{
+				ID:   crumb.ID,
+				Name: crumb.Name,
+			})
+		}
+		result = append(result, config.DirectoryTarget{
 			ID:   target.ID,
 			Path: path,
 		})

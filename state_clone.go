@@ -19,6 +19,8 @@ func cloneSettings(settings config.Settings) config.Settings {
 	cloned.PlayerPaths = cloneStringMap(settings.PlayerPaths)
 	cloned.DisabledPlayers = cloneBoolMap(settings.DisabledPlayers)
 	cloned.OfflineRecentTargets = cloneDirectoryTargets(settings.OfflineRecentTargets)
+	cloned.ScraperDirectories = cloneDirectoryTargets(settings.ScraperDirectories)
+	cloned.ScraperSources = cloneStringSlice(settings.ScraperSources)
 	return cloned
 }
 
@@ -31,6 +33,16 @@ func cloneStringMap(source map[string]string) map[string]string {
 	for key, value := range source {
 		target[key] = value
 	}
+	return target
+}
+
+func cloneStringSlice(source []string) []string {
+	if len(source) == 0 {
+		return []string{}
+	}
+
+	target := make([]string, len(source))
+	copy(target, source)
 	return target
 }
 

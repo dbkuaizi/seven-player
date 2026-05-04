@@ -31,6 +31,9 @@ func TestStoreRoundTrip(t *testing.T) {
 					},
 				},
 			},
+			ScraperSources:      []string{"tmdb", "douban"},
+			ScraperLanguage:     "zh-CN",
+			TMDBReadAccessToken: "tmdb-demo-token",
 		},
 		Credential: &Credential{
 			UID:  "u",
@@ -55,6 +58,11 @@ func TestStoreRoundTrip(t *testing.T) {
 				LastPlayedAt:   "2026-04-25T10:11:12Z",
 			},
 		},
+		Window: WindowState{
+			Width:     1280,
+			Height:    820,
+			Maximised: true,
+		},
 	}
 
 	if err := store.Save(want); err != nil {
@@ -78,6 +86,12 @@ func TestStoreRoundTrip(t *testing.T) {
 	if len(got.Settings.OfflineRecentTargets) != 1 || got.Settings.OfflineRecentTargets[0].ID != "100" {
 		t.Fatalf("OfflineRecentTargets mismatch: %+v", got.Settings.OfflineRecentTargets)
 	}
+	if len(got.Settings.ScraperSources) != 2 || got.Settings.ScraperSources[0] != "tmdb" {
+		t.Fatalf("ScraperSources mismatch: %+v", got.Settings.ScraperSources)
+	}
+	if got.Settings.TMDBReadAccessToken != "tmdb-demo-token" {
+		t.Fatalf("TMDBReadAccessToken mismatch: got %q", got.Settings.TMDBReadAccessToken)
+	}
 	if got.LastDirectoryID != want.LastDirectoryID {
 		t.Fatalf("LastDirectoryID mismatch: got %q want %q", got.LastDirectoryID, want.LastDirectoryID)
 	}
@@ -93,6 +107,9 @@ func TestStoreRoundTrip(t *testing.T) {
 	}
 	if record.LastPositionMS != 90500 || record.SubtitlePath != "D:/subs/demo.srt" {
 		t.Fatalf("playback record mismatch: %+v", record)
+	}
+	if got.Window.Width != 1280 || got.Window.Height != 820 || !got.Window.Maximised {
+		t.Fatalf("window state mismatch: %+v", got.Window)
 	}
 }
 

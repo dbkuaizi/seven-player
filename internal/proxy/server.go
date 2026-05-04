@@ -67,6 +67,7 @@ func (s *Server) Start() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/stream", s.handleStream)
 	mux.HandleFunc("/avatar", s.handleAvatar)
+	mux.HandleFunc("/image", s.handleImage)
 	mux.HandleFunc("/subtitle", s.handleSubtitle)
 	mux.HandleFunc("/healthz", s.handleHealth)
 
@@ -107,6 +108,28 @@ func (s *Server) StreamURL(pickCode, name string) string {
 	query.Set("pickcode", pickCode)
 	query.Set("name", name)
 	return fmt.Sprintf("%s/stream?%s", s.baseURL, query.Encode())
+}
+
+func (s *Server) ImageURL(rawURL string) string {
+	rawURL = strings.TrimSpace(rawURL)
+	if rawURL == "" || s.baseURL == "" {
+		return ""
+	}
+
+	query := url.Values{}
+	query.Set("url", rawURL)
+	return fmt.Sprintf("%s/image?%s", s.baseURL, query.Encode())
+}
+
+func (s *Server) ImagePathURL(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" || s.baseURL == "" {
+		return ""
+	}
+
+	query := url.Values{}
+	query.Set("path", path)
+	return fmt.Sprintf("%s/image?%s", s.baseURL, query.Encode())
 }
 
 func (s *Server) SubtitleURL(path string) (string, string, bool) {
@@ -243,6 +266,82 @@ func (s *Server) handleAvatar(w http.ResponseWriter, r *http.Request) {
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 		s.logger.Error("avatar proxy upstream returned error", "url", rawURL, "status", resp.StatusCode, "body", strings.TrimSpace(string(body)))
+		_, _ = w.Write(body)
+		return
+	}
+	if r.Method == http.MethodHead {
+		return
+	}
+
+	_, _ = io.Copy(w, resp.Body)
+}
+
+func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
+	allowProxyCORS(w)
+	if r.Method == http.MethodOptions {
+		return
+	}
+
+	localPath := strings.TrimSpace(r.URL.Query().Get("path"))
+	if localPath != "" {
+		s.serveLocalImage(w, r, localPath)
+		return
+	}
+
+	rawURL := strings.TrimSpace(r.URL.Query().Get("url"))
+	if rawURL == "" {
+		http.Error(w, "missing image url", http.StatusBadRequest)
+		return
+	}
+
+	targetURL, err := url.Parse(rawURL)
+	if err != nil || targetURL == nil {
+		http.Error(w, "invalid image url", http.StatusBadRequest)
+		return
+	}
+
+	if !strings.EqualFold(targetURL.Scheme, "http") && !strings.EqualFold(targetURL.Scheme, "https") {
+		http.Error(w, "unsupported image scheme", http.StatusBadRequest)
+		return
+	}
+
+	req, err := http.NewRequestWithContext(r.Context(), r.Method, targetURL.String(), nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
+	req.Header.Set("User-Agent", "Mozilla/5.0 panplayer115/1.0")
+	if referer := imageReferer(targetURL.Hostname()); referer != "" {
+		req.Header.Set("Referer", referer)
+	}
+	req.Host = req.URL.Host
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		s.logger.Error("image proxy upstream request failed", "url", rawURL, "error", err)
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	for _, key := range []string{
+		"Accept-Ranges",
+		"Content-Length",
+		"Content-Type",
+		"ETag",
+		"Last-Modified",
+		"Cache-Control",
+	} {
+		if value := resp.Header.Get(key); value != "" {
+			w.Header().Set(key, value)
+		}
+	}
+
+	w.WriteHeader(resp.StatusCode)
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		s.logger.Error("image proxy upstream returned error", "url", rawURL, "status", resp.StatusCode, "body", strings.TrimSpace(string(body)))
 		_, _ = w.Write(body)
 		return
 	}
@@ -398,4 +497,42 @@ func allowProxyCORS(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Range, Content-Type")
 	w.Header().Set("Access-Control-Expose-Headers", "Accept-Ranges, Content-Length, Content-Range, Content-Type")
+}
+
+func (s *Server) serveLocalImage(w http.ResponseWriter, r *http.Request, localPath string) {
+	resolved, err := filepath.Abs(strings.TrimSpace(localPath))
+	if err != nil {
+		http.Error(w, "invalid image path", http.StatusBadRequest)
+		return
+	}
+
+	info, err := os.Stat(resolved)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			http.Error(w, "image not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	if info.IsDir() {
+		http.Error(w, "invalid image path", http.StatusBadRequest)
+		return
+	}
+
+	http.ServeFile(w, r, resolved)
+}
+
+func imageReferer(host string) string {
+	host = strings.ToLower(strings.TrimSpace(host))
+	switch {
+	case strings.Contains(host, "doubanio.com"), strings.Contains(host, "douban.com"):
+		return "https://movie.douban.com/"
+	case strings.Contains(host, "qpic.cn"), strings.Contains(host, "gtimg.com"), strings.Contains(host, "qq.com"):
+		return "https://v.qq.com/"
+	case strings.Contains(host, "bangumi.tv"), strings.Contains(host, "bgm.tv"):
+		return "https://bangumi.tv/"
+	default:
+		return ""
+	}
 }

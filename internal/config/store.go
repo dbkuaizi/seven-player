@@ -40,6 +40,13 @@ type Settings struct {
 	SmallFileFilterMB    int               `json:"smallFileFilterMB,omitempty"`
 	FileListDensity      string            `json:"fileListDensity,omitempty"`
 	OfflineRecentTargets []DirectoryTarget `json:"offlineRecentTargets,omitempty"`
+	ScraperDirectories   []DirectoryTarget `json:"scraperDirectories,omitempty"`
+	ScraperSources       []string          `json:"scraperSources,omitempty"`
+	ScraperLanguage      string            `json:"scraperLanguage,omitempty"`
+	ScraperAutoScan      bool              `json:"scraperAutoScan,omitempty"`
+	ScraperOverwrite     bool              `json:"scraperOverwrite,omitempty"`
+	ScraperSkipImages    bool              `json:"scraperSkipImages,omitempty"`
+	TMDBReadAccessToken  string            `json:"tmdbReadAccessToken,omitempty"`
 }
 
 type PlaybackRecord struct {
@@ -51,12 +58,19 @@ type PlaybackRecord struct {
 	LastPlayedAt   string `json:"lastPlayedAt,omitempty"`
 }
 
+type WindowState struct {
+	Width     int  `json:"width,omitempty"`
+	Height    int  `json:"height,omitempty"`
+	Maximised bool `json:"maximised,omitempty"`
+}
+
 type State struct {
 	Settings        Settings                  `json:"settings"`
 	Credential      *Credential               `json:"credential,omitempty"`
 	Cookies         map[string]string         `json:"cookies,omitempty"`
 	LastDirectoryID string                    `json:"lastDirectoryId"`
 	PlaybackRecords map[string]PlaybackRecord `json:"playbackRecords,omitempty"`
+	Window          WindowState               `json:"window,omitempty"`
 }
 
 type Store struct {
@@ -73,6 +87,9 @@ func DefaultState() State {
 			DisabledPlayers:      map[string]bool{},
 			FileListDensity:      "default",
 			OfflineRecentTargets: []DirectoryTarget{},
+			ScraperDirectories:   []DirectoryTarget{},
+			ScraperSources:       DefaultScraperSources(),
+			ScraperLanguage:      "zh-CN",
 		},
 		PlaybackRecords: map[string]PlaybackRecord{},
 	}
@@ -136,6 +153,10 @@ func (s *Store) Path() string {
 	return s.path
 }
 
+func (s *Store) DB() *sql.DB {
+	return s.db
+}
+
 func (s *Store) Close() error {
 	if s == nil || s.db == nil {
 		return nil
@@ -180,6 +201,92 @@ func (s *Store) initSchema() error {
 			data TEXT NOT NULL,
 			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);
+		CREATE TABLE IF NOT EXISTS library_titles (
+			id TEXT PRIMARY KEY,
+			group_key TEXT NOT NULL UNIQUE,
+			section TEXT NOT NULL,
+			child TEXT NOT NULL,
+			title TEXT NOT NULL,
+			original_title TEXT NOT NULL DEFAULT '',
+			search_title TEXT NOT NULL DEFAULT '',
+			normalized_title TEXT NOT NULL DEFAULT '',
+			year INTEGER NOT NULL DEFAULT 0,
+			rating REAL NOT NULL DEFAULT 0,
+			summary TEXT NOT NULL DEFAULT '',
+			director TEXT NOT NULL DEFAULT '',
+			cast_json TEXT NOT NULL DEFAULT '[]',
+			tags_json TEXT NOT NULL DEFAULT '[]',
+			poster_url TEXT NOT NULL DEFAULT '',
+			poster_local_path TEXT NOT NULL DEFAULT '',
+			backdrop_url TEXT NOT NULL DEFAULT '',
+			backdrop_local_path TEXT NOT NULL DEFAULT '',
+			quality TEXT NOT NULL DEFAULT '',
+			source TEXT NOT NULL DEFAULT '',
+			audio TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT '',
+			source_name TEXT NOT NULL DEFAULT '',
+			source_subject_id TEXT NOT NULL DEFAULT '',
+			external_data_json TEXT NOT NULL DEFAULT '{}',
+			default_file_id TEXT NOT NULL DEFAULT '',
+			season_count INTEGER NOT NULL DEFAULT 0,
+			episode_count INTEGER NOT NULL DEFAULT 0,
+			total_duration_sec INTEGER NOT NULL DEFAULT 0,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			scraped_at TEXT NOT NULL DEFAULT ''
+		);
+		CREATE INDEX IF NOT EXISTS idx_library_titles_section ON library_titles(section, child, updated_at DESC);
+		CREATE INDEX IF NOT EXISTS idx_library_titles_group_key ON library_titles(group_key);
+
+		CREATE TABLE IF NOT EXISTS library_files (
+			id TEXT PRIMARY KEY,
+			title_id TEXT NOT NULL,
+			file_id TEXT NOT NULL UNIQUE,
+			pick_code TEXT NOT NULL DEFAULT '',
+			parent_id TEXT NOT NULL DEFAULT '',
+			path_json TEXT NOT NULL DEFAULT '[]',
+			name TEXT NOT NULL,
+			size INTEGER NOT NULL DEFAULT 0,
+			updated_at TEXT NOT NULL DEFAULT '',
+			duration_sec INTEGER NOT NULL DEFAULT 0,
+			season_number INTEGER NOT NULL DEFAULT 0,
+			episode_number INTEGER NOT NULL DEFAULT 0,
+			episode_title TEXT NOT NULL DEFAULT '',
+			quality TEXT NOT NULL DEFAULT '',
+			source TEXT NOT NULL DEFAULT '',
+			audio TEXT NOT NULL DEFAULT '',
+			search_title TEXT NOT NULL DEFAULT '',
+			parsed_year INTEGER NOT NULL DEFAULT 0,
+			section TEXT NOT NULL,
+			child TEXT NOT NULL,
+			display_order INTEGER NOT NULL DEFAULT 0,
+			created_at TEXT NOT NULL,
+			updated_at_row TEXT NOT NULL,
+			scraped_at TEXT NOT NULL DEFAULT '',
+			FOREIGN KEY(title_id) REFERENCES library_titles(id) ON DELETE CASCADE
+		);
+		CREATE INDEX IF NOT EXISTS idx_library_files_title_id ON library_files(title_id, season_number, episode_number, display_order, name);
+		CREATE INDEX IF NOT EXISTS idx_library_files_file_id ON library_files(file_id);
+
+		CREATE TABLE IF NOT EXISTS scraper_jobs (
+			id TEXT PRIMARY KEY,
+			status TEXT NOT NULL,
+			message TEXT NOT NULL DEFAULT '',
+			current_path TEXT NOT NULL DEFAULT '',
+			scanned_directories INTEGER NOT NULL DEFAULT 0,
+			total_directories INTEGER NOT NULL DEFAULT 0,
+			discovered_files INTEGER NOT NULL DEFAULT 0,
+			processed_files INTEGER NOT NULL DEFAULT 0,
+			matched_items INTEGER NOT NULL DEFAULT 0,
+			updated_titles INTEGER NOT NULL DEFAULT 0,
+			error_count INTEGER NOT NULL DEFAULT 0,
+			settings_json TEXT NOT NULL DEFAULT '{}',
+			last_error TEXT NOT NULL DEFAULT '',
+			started_at TEXT NOT NULL,
+			finished_at TEXT NOT NULL DEFAULT '',
+			updated_at TEXT NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_scraper_jobs_updated_at ON scraper_jobs(updated_at DESC);
 	`)
 	return err
 }
@@ -261,6 +368,9 @@ func normalizeSettings(settings Settings) Settings {
 	if settings.OfflineRecentTargets == nil {
 		settings.OfflineRecentTargets = []DirectoryTarget{}
 	}
+	if settings.ScraperDirectories == nil {
+		settings.ScraperDirectories = []DirectoryTarget{}
+	}
 	if settings.MPVPath != "" && settings.PlayerPaths["mpv"] == "" {
 		settings.PlayerPaths["mpv"] = settings.MPVPath
 	}
@@ -274,13 +384,65 @@ func normalizeSettings(settings Settings) Settings {
 	settings.SmallFileFilterMB = normalizeSmallFileFilterMB(settings.SmallFileFilterMB)
 	settings.FileListDensity = normalizeFileListDensity(settings.FileListDensity)
 	settings.OfflineRecentTargets = NormalizeOfflineRecentTargets(settings.OfflineRecentTargets)
+	settings.ScraperDirectories = NormalizeDirectoryTargets(settings.ScraperDirectories, 50)
+	settings.ScraperSources = NormalizeScraperSources(settings.ScraperSources)
+	settings.ScraperLanguage = NormalizeScraperLanguage(settings.ScraperLanguage)
+	settings.TMDBReadAccessToken = strings.TrimSpace(settings.TMDBReadAccessToken)
 	settings.HideSmallFiles = false
 	return settings
 }
 
+func DefaultScraperSources() []string {
+	return []string{"tmdb", "douban", "bangumi"}
+}
+
+func NormalizeScraperSources(sources []string) []string {
+	allowed := map[string]struct{}{
+		"tmdb":    {},
+		"douban":  {},
+		"bangumi": {},
+	}
+	normalized := make([]string, 0, len(allowed))
+	seen := make(map[string]struct{}, len(allowed))
+
+	for _, source := range sources {
+		source = strings.ToLower(strings.TrimSpace(source))
+		if _, ok := allowed[source]; !ok {
+			continue
+		}
+		if _, exists := seen[source]; exists {
+			continue
+		}
+		seen[source] = struct{}{}
+		normalized = append(normalized, source)
+	}
+
+	if len(normalized) == 0 {
+		return DefaultScraperSources()
+	}
+	return normalized
+}
+
+func NormalizeScraperLanguage(language string) string {
+	switch strings.TrimSpace(language) {
+	case "zh-CN", "zh-TW", "en-US", "ja-JP", "ko-KR":
+		return strings.TrimSpace(language)
+	default:
+		return "zh-CN"
+	}
+}
+
 func NormalizeOfflineRecentTargets(targets []DirectoryTarget) []DirectoryTarget {
+	return NormalizeDirectoryTargets(targets, 3)
+}
+
+func NormalizeDirectoryTargets(targets []DirectoryTarget, limit int) []DirectoryTarget {
+	if limit <= 0 {
+		return []DirectoryTarget{}
+	}
+
 	normalized := make([]DirectoryTarget, 0, 3)
-	seen := make(map[string]struct{}, 3)
+	seen := make(map[string]struct{}, limit)
 
 	for _, target := range targets {
 		current, ok := NormalizeDirectoryTarget(target)
@@ -292,7 +454,7 @@ func NormalizeOfflineRecentTargets(targets []DirectoryTarget) []DirectoryTarget 
 		}
 		seen[current.ID] = struct{}{}
 		normalized = append(normalized, current)
-		if len(normalized) == 3 {
+		if len(normalized) == limit {
 			break
 		}
 	}
@@ -396,8 +558,29 @@ func normalizeFileListDensity(value string) string {
 
 func normalizeState(state State) State {
 	state.Settings = normalizeSettings(state.Settings)
+	if state.Credential != nil {
+		state.Credential.UID = strings.TrimSpace(state.Credential.UID)
+		state.Credential.CID = strings.TrimSpace(state.Credential.CID)
+		state.Credential.SEID = strings.TrimSpace(state.Credential.SEID)
+		state.Credential.KID = strings.TrimSpace(state.Credential.KID)
+		if state.Credential.UID == "" &&
+			state.Credential.CID == "" &&
+			state.Credential.SEID == "" &&
+			state.Credential.KID == "" {
+			state.Credential = nil
+		}
+	}
+	if state.Cookies == nil {
+		state.Cookies = map[string]string{}
+	}
 	if state.PlaybackRecords == nil {
 		state.PlaybackRecords = map[string]PlaybackRecord{}
+	}
+	if state.Window.Width < 0 {
+		state.Window.Width = 0
+	}
+	if state.Window.Height < 0 {
+		state.Window.Height = 0
 	}
 	return state
 }

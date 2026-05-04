@@ -49,13 +49,10 @@ wails3 dev
 wails3 build
 ```
 
-在只有 Windows 的机器上构建 macOS ARM64 包，需要 Docker Desktop：
+当前仓库已按 Windows 本地开发做了精简。默认构建产物在：
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/build-macos-arm64-docker.ps1
-```
-
-产物会写到 `dist/PanPlayer115-darwin-arm64.zip`，同时生成 `.sha256` 校验文件。这个包是未签名构建，分发给其他 macOS 用户时仍建议做 Developer ID 签名和 notarize。
+- `bin/panplayer115.exe`
+- 安装器：`build/windows/nsis/panplayer115-installer.exe`
 
 ## 凭证与设置
 
@@ -86,6 +83,6 @@ powershell -ExecutionPolicy Bypass -File scripts/build-macos-arm64-docker.ps1
 ## 说明
 
 - 当前已经做成播放器适配层，后面可以继续往更多播放器和平台扩展
-- 现在 `mpv / VLC` 是跨平台目标，`PotPlayer / MPC-HC / MPC-BE` 偏 Windows
+- 现在开发链默认只保留 Windows 构建；`mpv / VLC` 仍然可以作为后续跨平台播放器目标
 - 播放时会先经过本地回环代理，再由外部播放器拉流
 - 续播记录目前以 `mpv` 适配最完整；其他播放器已经支持基础启动、字幕和部分起播跳转能力
