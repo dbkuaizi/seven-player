@@ -1,20 +1,26 @@
 import { computed, ref } from 'vue'
 import {
+  SaveCleanTitleDisplayEnabled,
   DeletePlayerPath,
   SaveFileListDensity,
   SavePlayerDisabled,
   SavePreferredPlayer,
   SaveSmallFileFilterMB,
   SaveShowTitleBadgesEnabled,
+  SaveThemeMode,
+  SaveUIScalePercent,
   SelectPlayerPath,
 } from '../../bindings/panplayer/app'
 import {
   createDefaultSettings,
   normalizeFileListDensity,
   normalizeSettingsView,
+  normalizeThemeMode,
+  normalizeUIScalePercent,
 } from '../utils/settings'
+import { isUserCancelledError } from '../utils/error'
 
-export function useSettingsState({ showNotice, showError, refreshFilePresentation }) {
+export function useSettingsState({ showNotice, showError, refreshFilePresentation, applyUIScale, applyThemeMode }) {
   const settingsTab = ref('player')
   const settings = ref(createDefaultSettings())
   const playerLoading = ref(false)
@@ -30,6 +36,8 @@ export function useSettingsState({ showNotice, showError, refreshFilePresentatio
   function applySettingsView(view) {
     settings.value = normalizeSettingsView(view)
     smallFileFilterMB.value = Number(settings.value.smallFileFilterMB || 0)
+    applyUIScale?.(settings.value.uiScalePercent)
+    applyThemeMode?.(settings.value.themeMode)
   }
 
   async function changePreferredPlayer(playerId) {
@@ -64,6 +72,15 @@ export function useSettingsState({ showNotice, showError, refreshFilePresentatio
     }
   }
 
+  async function saveCleanTitleDisplay(enabled) {
+    try {
+      applySettingsView(await SaveCleanTitleDisplayEnabled(Boolean(enabled)))
+      refreshFilePresentation()
+    } catch (error) {
+      showError(error, '保存标题精简显示设置失败')
+    }
+  }
+
   async function saveSmallFileFilter(value) {
     const nextValue = Number(value || 0)
     smallFileFilterMB.value = nextValue
@@ -86,6 +103,28 @@ export function useSettingsState({ showNotice, showError, refreshFilePresentatio
     }
   }
 
+  async function saveUIScale(value) {
+    const nextValue = normalizeUIScalePercent(value)
+
+    try {
+      applySettingsView(await SaveUIScalePercent(nextValue))
+      showNotice('success', `界面缩放已切换为 ${nextValue}%。`)
+    } catch (error) {
+      showError(error, '保存界面缩放失败')
+    }
+  }
+
+  async function saveThemeMode(value) {
+    const nextValue = normalizeThemeMode(value)
+
+    try {
+      applySettingsView(await SaveThemeMode(nextValue))
+      showNotice('success', '外观模式已保存。')
+    } catch (error) {
+      showError(error, '保存外观模式失败')
+    }
+  }
+
   async function choosePlayerPath(playerId = selectedPlayer.value?.id || settings.value?.preferredPlayer || 'mpv') {
     playerLoading.value = true
 
@@ -93,6 +132,9 @@ export function useSettingsState({ showNotice, showError, refreshFilePresentatio
       applySettingsView(await SelectPlayerPath(playerId))
       showNotice('success', '播放器路径已保存。')
     } catch (error) {
+      if (isUserCancelledError(error)) {
+        return
+      }
       showError(error, '设置播放器路径失败')
     } finally {
       playerLoading.value = false
@@ -150,6 +192,9 @@ export function useSettingsState({ showNotice, showError, refreshFilePresentatio
     selectedPlayer,
     applySettingsView,
     saveShowTitleBadges,
+    saveCleanTitleDisplay,
+    saveUIScale,
+    saveThemeMode,
     saveSmallFileFilter,
     saveFileListDensity,
     choosePlayerPath,

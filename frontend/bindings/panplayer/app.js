@@ -159,6 +159,16 @@ export function RevealConfigPath() {
 }
 
 /**
+ * @param {boolean} enabled
+ * @returns {$CancellablePromise<$models.SettingsView | null>}
+ */
+export function SaveCleanTitleDisplayEnabled(enabled) {
+    return $Call.ByID(3281688526, enabled).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType9($result);
+    }));
+}
+
+/**
  * @param {string} value
  * @returns {$CancellablePromise<$models.SettingsView | null>}
  */
@@ -243,6 +253,26 @@ export function SaveSmallFileFilterMB(value) {
 }
 
 /**
+ * @param {string} value
+ * @returns {$CancellablePromise<$models.SettingsView | null>}
+ */
+export function SaveThemeMode(value) {
+    return $Call.ByID(2728365282, value).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType9($result);
+    }));
+}
+
+/**
+ * @param {number} value
+ * @returns {$CancellablePromise<$models.SettingsView | null>}
+ */
+export function SaveUIScalePercent(value) {
+    return $Call.ByID(2231431017, value).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType9($result);
+    }));
+}
+
+/**
  * @param {string} keyword
  * @param {number} offset
  * @param {number} limit
@@ -282,11 +312,23 @@ export function SelectTorrentFileAsMagnet() {
 }
 
 /**
+ * @param {boolean} enabled
+ * @param {string} password
+ * @param {boolean} rememberPassword
+ * @returns {$CancellablePromise<pan$0.HiddenModeStatusView | null>}
+ */
+export function SetHiddenMode(enabled, password, rememberPassword) {
+    return $Call.ByID(1668670068, enabled, password, rememberPassword).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType19($result);
+    }));
+}
+
+/**
  * @returns {$CancellablePromise<pan$0.LoginSessionView | null>}
  */
 export function StartQRCodeLogin() {
     return $Call.ByID(2084241698).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType19($result);
+        return $$createType21($result);
     }));
 }
 
@@ -309,5 +351,7 @@ const $$createType14 = $models.BuiltinPlaybackSource.createFrom;
 const $$createType15 = $Create.Nullable($$createType14);
 const $$createType16 = pan$0.SearchResultView.createFrom;
 const $$createType17 = $Create.Nullable($$createType16);
-const $$createType18 = pan$0.LoginSessionView.createFrom;
+const $$createType18 = pan$0.HiddenModeStatusView.createFrom;
 const $$createType19 = $Create.Nullable($$createType18);
+const $$createType20 = pan$0.LoginSessionView.createFrom;
+const $$createType21 = $Create.Nullable($$createType20);

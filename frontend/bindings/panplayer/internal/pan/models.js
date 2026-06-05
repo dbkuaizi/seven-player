@@ -188,6 +188,13 @@ export class FileItem {
              */
             this["isVideo"] = false;
         }
+        if (!("isHiddenFile" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["isHiddenFile"] = false;
+        }
         if (!("updatedAt" in $$source)) {
             /**
              * @member
@@ -235,6 +242,48 @@ export class FileItem {
     static createFrom($$source = {}) {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new FileItem(/** @type {Partial<FileItem>} */($$parsedSource));
+    }
+}
+
+export class HiddenModeStatusView {
+    /**
+     * Creates a new HiddenModeStatusView instance.
+     * @param {Partial<HiddenModeStatusView>} [$$source = {}] - The source object to create the HiddenModeStatusView.
+     */
+    constructor($$source = {}) {
+        if (!("enabled" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["enabled"] = false;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["message"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["rememberedPassword"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new HiddenModeStatusView instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {HiddenModeStatusView}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new HiddenModeStatusView(/** @type {Partial<HiddenModeStatusView>} */($$parsedSource));
     }
 }
 

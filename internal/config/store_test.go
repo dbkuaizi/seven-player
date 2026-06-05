@@ -44,6 +44,8 @@ func TestStoreRoundTrip(t *testing.T) {
 			"SEID": "s",
 			"KID":  "k",
 		},
+		HiddenModeEnabled: true,
+		HiddenModePasswordMD5: "abc123md5",
 		LastDirectoryID: "123",
 		PlaybackRecords: map[string]PlaybackRecord{
 			"pc1": {
@@ -91,6 +93,9 @@ func TestStoreRoundTrip(t *testing.T) {
 	}
 	if got.Cookies["UID"] != "u" || got.Cookies["KID"] != "k" {
 		t.Fatalf("cookies mismatch: %+v", got.Cookies)
+	}
+	if !got.HiddenModeEnabled || got.HiddenModePasswordMD5 != "abc123md5" {
+		t.Fatalf("hidden mode state mismatch: enabled=%v md5=%q", got.HiddenModeEnabled, got.HiddenModePasswordMD5)
 	}
 	record, ok := got.PlaybackRecords["pc1"]
 	if !ok {

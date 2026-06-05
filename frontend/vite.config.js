@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import wails from '@wailsio/runtime/plugins/vite'
+import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
   plugins: [
@@ -13,6 +14,11 @@ export default defineConfig({
     }),
     wails('bindings'),
   ],
+  resolve: {
+    alias: {
+      bindings: fileURLToPath(new URL('./bindings', import.meta.url)),
+    },
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,

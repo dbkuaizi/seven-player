@@ -11,6 +11,8 @@ const props = defineProps({
   accountSpaceUsageText: { type: String, default: '--' },
   accountSpacePercentText: { type: String, default: '--' },
   accountSpacePercent: { type: Number, default: 0 },
+  hiddenModeEnabled: { type: Boolean, default: false },
+  hiddenModeLoading: { type: Boolean, default: false },
   actionLoading: { type: Boolean, default: false },
 })
 

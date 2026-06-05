@@ -83,6 +83,20 @@ export class BootstrapResult {
              */
             this["user"] = undefined;
         }
+        if (!("hiddenMode" in $$source)) {
+            /**
+             * @member
+             * @type {pan$0.HiddenModeStatusView}
+             */
+            this["hiddenMode"] = (new pan$0.HiddenModeStatusView());
+        }
+        if (!("hiddenModePasswordRemembered" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["hiddenModePasswordRemembered"] = false;
+        }
         if (!("settings" in $$source)) {
             /**
              * @member
@@ -123,12 +137,16 @@ export class BootstrapResult {
     static createFrom($$source = {}) {
         const $$createField1_0 = $$createType4;
         const $$createField2_0 = $$createType5;
+        const $$createField4_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("user" in $$parsedSource) {
             $$parsedSource["user"] = $$createField1_0($$parsedSource["user"]);
         }
+        if ("hiddenMode" in $$parsedSource) {
+            $$parsedSource["hiddenMode"] = $$createField2_0($$parsedSource["hiddenMode"]);
+        }
         if ("settings" in $$parsedSource) {
-            $$parsedSource["settings"] = $$createField2_0($$parsedSource["settings"]);
+            $$parsedSource["settings"] = $$createField4_0($$parsedSource["settings"]);
         }
         return new BootstrapResult(/** @type {Partial<BootstrapResult>} */($$parsedSource));
     }
@@ -337,6 +355,13 @@ export class PlayRequest {
              */
             this["subtitle"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["playerId"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }
@@ -519,6 +544,27 @@ export class SettingsView {
              */
             this["showTitleBadges"] = false;
         }
+        if (!("cleanTitleDisplay" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["cleanTitleDisplay"] = false;
+        }
+        if (!("uiScalePercent" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["uiScalePercent"] = 0;
+        }
+        if (!("themeMode" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["themeMode"] = "";
+        }
         if (!("smallFileFilterMB" in $$source)) {
             /**
              * @member
@@ -550,14 +596,14 @@ export class SettingsView {
      * @returns {SettingsView}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType7;
-        const $$createField6_0 = $$createType9;
+        const $$createField1_0 = $$createType8;
+        const $$createField9_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("players" in $$parsedSource) {
             $$parsedSource["players"] = $$createField1_0($$parsedSource["players"]);
         }
         if ("offlineRecentTargets" in $$parsedSource) {
-            $$parsedSource["offlineRecentTargets"] = $$createField6_0($$parsedSource["offlineRecentTargets"]);
+            $$parsedSource["offlineRecentTargets"] = $$createField9_0($$parsedSource["offlineRecentTargets"]);
         }
         return new SettingsView(/** @type {Partial<SettingsView>} */($$parsedSource));
     }
@@ -569,8 +615,9 @@ const $$createType1 = pan$0.Breadcrumb.createFrom;
 const $$createType2 = $Create.Array($$createType1);
 const $$createType3 = pan$0.UserView.createFrom;
 const $$createType4 = $Create.Nullable($$createType3);
-const $$createType5 = SettingsView.createFrom;
-const $$createType6 = player$0.Status.createFrom;
-const $$createType7 = $Create.Array($$createType6);
-const $$createType8 = DirectoryTargetView.createFrom;
-const $$createType9 = $Create.Array($$createType8);
+const $$createType5 = pan$0.HiddenModeStatusView.createFrom;
+const $$createType6 = SettingsView.createFrom;
+const $$createType7 = player$0.Status.createFrom;
+const $$createType8 = $Create.Array($$createType7);
+const $$createType9 = DirectoryTargetView.createFrom;
+const $$createType10 = $Create.Array($$createType9);

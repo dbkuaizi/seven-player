@@ -11,6 +11,8 @@ const props = defineProps({
   breadcrumbDisplayItems: { type: Array, default: () => [] },
   searchInputVisible: { type: Boolean, default: false },
   searchQuery: { type: String, default: '' },
+  hiddenModeEnabled: { type: Boolean, default: false },
+  hiddenModeLoading: { type: Boolean, default: false },
   typeFilter: { type: String, default: 'all' },
   sortMode: { type: String, default: 'folders' },
   filterMenuOpen: { type: Boolean, default: false },
@@ -42,6 +44,7 @@ const emit = defineEmits([
   'open-login',
   'open-breadcrumb',
   'reload',
+  'toggle-hidden-mode',
   'toggle-search',
   'search-blur',
   'search-clear',
@@ -49,6 +52,7 @@ const emit = defineEmits([
   'save-small-file-filter',
   'save-file-list-density',
   'save-show-title-badges',
+  'save-clean-title-display',
   'open-details',
   'primary-action',
   'page-size-change',
@@ -65,9 +69,9 @@ const loading = computed(() => props.directoryLoading || props.actionLoading || 
 
 watch(() => props.searchInputVisible, (visible) => {
   if (visible) {
-    nextTick(() => {
+    window.setTimeout(() => {
       searchField.value?.focus?.()
-    })
+    }, 30)
   }
 })
 
@@ -218,16 +222,23 @@ function estimateBadgeWidth(label) {
   context.font = '500 11px Roboto, Arial, sans-serif'
   return Math.ceil(context.measureText(text).width) + 24
 }
+
+function breadcrumbLabel(item) {
+  if (String(item?.id || '') === '0') {
+    return '根目录'
+  }
+  return String(item?.title || '')
+}
 </script>
 
 <template>
-  <section class="page-section">
+  <section class="page-section files-page">
     <v-card class="section-card d-flex flex-column">
-      <v-toolbar density="compact" flat class="page-toolbar px-2">
+      <div class="page-toolbar file-nav-row">
         <div class="breadcrumb-strip">
           <div class="path-bar">
             <div v-if="props.isGlobalSearchActive" class="search-path-indicator">
-              <v-icon size="16" color="medium-emphasis">mdi-magnify</v-icon>
+              <v-icon size="14" color="medium-emphasis">mdi-magnify</v-icon>
               <span class="text-truncate">{{ props.searchSummaryText }}</span>
             </div>
 
@@ -235,10 +246,9 @@ function estimateBadgeWidth(label) {
               v-else
               class="file-breadcrumbs pa-0"
               :items="props.breadcrumbDisplayItems"
-              divider="›"
             >
-              <template #prepend>
-                <v-icon size="16" color="medium-emphasis">mdi-folder-outline</v-icon>
+              <template #divider>
+                <span class="file-breadcrumb-divider">/</span>
               </template>
 
               <template #title="{ item }">
@@ -249,148 +259,192 @@ function estimateBadgeWidth(label) {
                   :disabled="item.disabled"
                   @click="emit('open-breadcrumb', item.id)"
                 >
-                  {{ item.title }}
+                  {{ breadcrumbLabel(item) }}
                 </button>
               </template>
             </v-breadcrumbs>
-
-            <v-btn
-              icon="mdi-refresh"
-              variant="text"
-              size="x-small"
-              class="path-refresh"
-              :disabled="!props.loggedIn"
-              :loading="props.isGlobalSearchActive ? props.searchLoading : props.directoryLoading"
-              @click="emit('reload')"
-            />
           </div>
         </div>
 
-        <div class="search-slot">
-          <div
-            class="search-shell"
-            :class="{ 'search-shell--expanded': props.searchInputVisible }"
-          >
+        <div class="toolbar-action-group">
+          <v-tooltip text="刷新" location="bottom">
+            <template #activator="{ props: tooltipProps }">
+              <v-btn
+                v-bind="tooltipProps"
+                icon="mdi-refresh"
+                variant="text"
+                size="small"
+                class="toolbar-action-btn"
+                :disabled="!props.loggedIn"
+                :loading="props.isGlobalSearchActive ? props.searchLoading : props.directoryLoading"
+                @click="emit('reload')"
+              />
+            </template>
+          </v-tooltip>
+
+          <v-tooltip :text="props.hiddenModeEnabled ? '关闭隐私模式' : '开启隐私模式'" location="bottom">
+            <template #activator="{ props: tooltipProps }">
+              <v-btn
+                v-bind="tooltipProps"
+                :icon="props.hiddenModeEnabled ? 'mdi-shield-lock' : 'mdi-shield-lock-outline'"
+                variant="text"
+                size="small"
+                class="toolbar-action-btn"
+                :class="{ 'toolbar-action-btn--active': props.hiddenModeEnabled }"
+                :disabled="!props.loggedIn"
+                :loading="props.hiddenModeLoading"
+                @click="emit('toggle-hidden-mode')"
+              />
+            </template>
+          </v-tooltip>
+
+          <div class="toolbar-search-anchor">
             <v-btn
               :icon="props.searchInputVisible ? 'mdi-close' : 'mdi-magnify'"
-              size="small"
               variant="text"
+              size="small"
+              class="toolbar-action-btn"
+              :class="{ 'toolbar-action-btn--active': props.searchInputVisible || props.isGlobalSearchActive }"
               :disabled="!props.loggedIn"
-              class="search-trigger"
               @click="emit('toggle-search')"
             />
 
-            <div class="search-field-wrap">
-              <v-text-field
-                ref="searchField"
-                :model-value="props.searchQuery"
-                class="compact-search"
-                clearable
-                :disabled="!props.loggedIn"
-                density="compact"
-                hide-details
-                variant="solo-filled"
-                flat
-                placeholder="全盘搜索"
-                prepend-inner-icon="mdi-magnify"
-                @update:model-value="emit('update:searchQuery', $event)"
-                @blur="emit('search-blur')"
-                @click:clear="emit('search-clear')"
-                @keydown.enter.prevent="emit('trigger-search')"
-              />
+            <div v-if="props.searchInputVisible" class="search-popover">
+              <div class="search-popover-row">
+                <v-text-field
+                  ref="searchField"
+                  :model-value="props.searchQuery"
+                  class="search-popover-input"
+                  clearable
+                  autofocus
+                  :disabled="!props.loggedIn"
+                  density="compact"
+                  hide-details
+                  variant="outlined"
+                  placeholder="搜索整个网盘"
+                  prepend-inner-icon="mdi-magnify"
+                  @update:model-value="emit('update:searchQuery', $event)"
+                  @blur="emit('search-blur')"
+                  @click:clear="emit('search-clear')"
+                  @keydown.enter.prevent="emit('trigger-search')"
+                />
+
+                <div class="search-popover-summary text-caption text-medium-emphasis">
+                  {{ props.searchLoading ? '搜索中…' : (props.searchSummaryText || '输入关键词后自动搜索') }}
+                </div>
+
+                <v-btn
+                  icon="mdi-close"
+                  variant="text"
+                  size="small"
+                  class="toolbar-action-btn search-popover-close"
+                  @click="emit('toggle-search')"
+                />
+              </div>
             </div>
           </div>
+
+          <v-menu
+            :model-value="props.filterMenuOpen"
+            location="bottom end"
+            offset="8"
+            :close-on-content-click="false"
+            @update:model-value="emit('update:filterMenuOpen', $event)"
+          >
+            <template #activator="{ props: menuProps }">
+              <v-btn
+                class="toolbar-action-btn"
+                :class="{ 'toolbar-action-btn--active': props.filterMenuOpen }"
+                :aria-controls="menuProps['aria-controls']"
+                :aria-expanded="menuProps['aria-expanded']"
+                :aria-haspopup="menuProps['aria-haspopup']"
+                icon="mdi-tune-variant"
+                size="small"
+                variant="text"
+                @click="menuProps.onClick"
+              />
+            </template>
+
+            <v-card class="filter-menu" min-width="268">
+              <v-card-text class="filter-menu-body">
+                <v-select
+                  :model-value="props.typeFilter"
+                  class="filter-select"
+                  density="compact"
+                  hide-details
+                  item-title="label"
+                  item-value="value"
+                  :items="props.typeOptions"
+                  label="类型"
+                  variant="outlined"
+                  @update:model-value="emit('update:typeFilter', $event)"
+                />
+
+                <v-select
+                  :model-value="props.sortMode"
+                  class="filter-select"
+                  density="compact"
+                  hide-details
+                  item-title="label"
+                  item-value="value"
+                  :items="props.sortOptions"
+                  label="排序"
+                  variant="outlined"
+                  @update:model-value="emit('update:sortMode', $event)"
+                />
+
+                <v-select
+                  :model-value="props.smallFileFilterMB"
+                  class="filter-select"
+                  density="compact"
+                  hide-details
+                  item-title="label"
+                  item-value="value"
+                  :items="props.smallFileFilterOptions"
+                  label="小文件屏蔽规则"
+                  variant="outlined"
+                  @update:model-value="emit('save-small-file-filter', $event)"
+                />
+
+                <v-select
+                  :model-value="props.settings.fileListDensity"
+                  class="filter-select"
+                  density="compact"
+                  hide-details
+                  item-title="label"
+                  item-value="value"
+                  :items="props.fileListDensityOptions"
+                  label="文件列表密度"
+                  variant="outlined"
+                  @update:model-value="emit('save-file-list-density', $event)"
+                />
+
+                <v-divider class="filter-divider" />
+
+                <v-checkbox
+                  :model-value="props.settings.showTitleBadges"
+                  class="filter-checkbox"
+                  color="primary"
+                  density="compact"
+                  hide-details
+                  label="显示徽章信息"
+                  @update:model-value="emit('save-show-title-badges', $event)"
+                />
+
+                <v-checkbox
+                  :model-value="props.settings.cleanTitleDisplay"
+                  class="filter-checkbox"
+                  color="primary"
+                  density="compact"
+                  hide-details
+                  label="精简显示文件标题"
+                  @update:model-value="emit('save-clean-title-display', $event)"
+                />
+              </v-card-text>
+            </v-card>
+          </v-menu>
         </div>
-
-        <v-menu
-          :model-value="props.filterMenuOpen"
-          location="bottom end"
-          :close-on-content-click="false"
-          @update:model-value="emit('update:filterMenuOpen', $event)"
-        >
-          <template #activator="{ props: menuProps }">
-            <v-btn
-              class="filter-trigger"
-              :class="{ 'filter-trigger--active': props.filterMenuOpen }"
-              :aria-controls="menuProps['aria-controls']"
-              :aria-expanded="menuProps['aria-expanded']"
-              :aria-haspopup="menuProps['aria-haspopup']"
-              icon="mdi-tune-variant"
-              size="small"
-              variant="text"
-              @click="menuProps.onClick"
-            />
-          </template>
-
-          <v-card class="filter-menu" min-width="268">
-            <v-card-text class="filter-menu-body">
-              <v-select
-                :model-value="props.typeFilter"
-                class="filter-select"
-                density="compact"
-                hide-details
-                item-title="label"
-                item-value="value"
-                :items="props.typeOptions"
-                label="类型"
-                variant="outlined"
-                @update:model-value="emit('update:typeFilter', $event)"
-              />
-
-              <v-select
-                :model-value="props.sortMode"
-                class="filter-select"
-                density="compact"
-                hide-details
-                item-title="label"
-                item-value="value"
-                :items="props.sortOptions"
-                label="排序"
-                variant="outlined"
-                @update:model-value="emit('update:sortMode', $event)"
-              />
-
-              <v-select
-                :model-value="props.smallFileFilterMB"
-                class="filter-select"
-                density="compact"
-                hide-details
-                item-title="label"
-                item-value="value"
-                :items="props.smallFileFilterOptions"
-                label="小文件屏蔽规则"
-                variant="outlined"
-                @update:model-value="emit('save-small-file-filter', $event)"
-              />
-
-              <v-select
-                :model-value="props.settings.fileListDensity"
-                class="filter-select"
-                density="compact"
-                hide-details
-                item-title="label"
-                item-value="value"
-                :items="props.fileListDensityOptions"
-                label="文件列表密度"
-                variant="outlined"
-                @update:model-value="emit('save-file-list-density', $event)"
-              />
-
-              <v-divider class="filter-divider" />
-
-              <v-checkbox
-                :model-value="props.settings.showTitleBadges"
-                class="filter-checkbox"
-                color="primary"
-                density="compact"
-                hide-details
-                label="显示徽章信息"
-                @update:model-value="emit('save-show-title-badges', $event)"
-              />
-            </v-card-text>
-          </v-card>
-        </v-menu>
-      </v-toolbar>
+      </div>
 
       <v-progress-linear
         :active="loading"
@@ -454,7 +508,23 @@ function estimateBadgeWidth(label) {
 
                     <div class="name-text">
                       <div class="file-title">
-                        <span class="file-title-main text-truncate">{{ item.displayName || item.name }}</span>
+                        <v-tooltip location="bottom">
+                          <template #activator="{ props: tooltipProps }">
+                            <div v-bind="tooltipProps" class="file-title-wrap">
+                              <v-icon
+                                v-if="item.isHiddenFile"
+                                size="13"
+                                class="file-title-lock"
+                                color="success"
+                              >
+                                mdi-lock-outline
+                              </v-icon>
+                              <span class="file-title-main text-truncate">{{ item.displayNameMain || item.displayName || item.name }}</span>
+                              <span v-if="item.displayNameExtension" class="file-title-extension">{{ item.displayNameExtension }}</span>
+                            </div>
+                          </template>
+                          <span>{{ item.originalName || item.name }}</span>
+                        </v-tooltip>
                       </div>
                       <div class="file-meta-row">
                         <span class="file-kind-label">{{ item.kindLabel }}</span>

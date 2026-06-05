@@ -52,7 +52,7 @@ export function normalizeFileItem(item, options = {}) {
   const resumeMs = Number(item?.resumeMs || 0)
   const durationSec = Number(item?.durationSec || 0)
   const originalName = String(item?.originalName || item?.name || '')
-  const presentation = buildFilePresentation(originalName, Boolean(item?.isDirectory))
+  const presentation = buildFilePresentation(originalName, Boolean(item?.isDirectory), options)
   const resumeBadge = buildResumeBadge(resumeMs, durationSec)
   const durationBadge = buildDurationBadge(durationSec, resumeMs)
   const badgeList = [
@@ -188,23 +188,224 @@ function buildDurationBadge(durationSec = 0, resumeMs = 0) {
   }
 }
 
-function buildFilePresentation(name, isDirectory) {
+function buildFilePresentation(name, isDirectory, options = {}) {
   const resolvedName = String(name || '').trim()
   const extension = extractExtension(resolvedName)
   const badgeSource = isDirectory ? resolvedName : stripExtension(resolvedName, extension)
   const badges = extractFileBadges(badgeSource)
   const mediaKind = detectMediaKind(isDirectory, extension)
-  const displayTitle = resolvedName || (isDirectory ? '未命名文件夹' : '未命名文件')
+  const displayTitle = buildDisplayTitle(resolvedName, extension, isDirectory, options)
+    || (resolvedName || (isDirectory ? '未命名文件夹' : '未命名文件'))
+  const displayParts = splitDisplayTitle(displayTitle, extension, isDirectory)
 
   return {
     title: displayTitle,
-    titleMain: displayTitle,
-    titleExtension: '',
+    titleMain: displayParts.main,
+    titleExtension: displayParts.extension,
     badges,
     mediaKind,
     icon: iconForMediaKind(mediaKind),
     kindLabel: labelForMediaKind(mediaKind),
   }
+}
+
+function buildDisplayTitle(name, extension, isDirectory, options = {}) {
+  const resolved = String(name || '').trim()
+  if (!resolved) {
+    return ''
+  }
+
+  if (options.cleanTitleDisplay === false) {
+    return resolved
+  }
+
+  if (isDirectory) {
+    return cleanupDisplayText(resolved)
+  }
+
+  const base = stripExtension(resolved, extension)
+  const cleanedBase = cleanupDisplayText(base)
+  return `${cleanedBase || base || resolved}${extension || ''}`
+}
+
+function splitDisplayTitle(title, extension, isDirectory) {
+  const resolved = String(title || '').trim()
+  if (!resolved) {
+    return { main: '', extension: '' }
+  }
+
+  if (isDirectory) {
+    return { main: resolved, extension: '' }
+  }
+
+  const actualExtension = extractExtension(resolved)
+  if (!actualExtension) {
+    return { main: resolved, extension: '' }
+  }
+
+  return {
+    main: stripExtension(resolved, actualExtension),
+    extension: actualExtension,
+  }
+}
+
+function cleanupDisplayText(value) {
+  let result = String(value || '').trim()
+  if (!result) {
+    return ''
+  }
+
+  result = stripLeadingBracketSegments(result)
+  result = stripLeadingSiteNoise(result)
+  result = stripDecorativeBracketSegments(result)
+  result = stripBracketedAds(result)
+  result = stripInlineSiteNoise(result)
+  result = stripTechnicalSegments(result)
+  result = preferPrimaryLocalizedTitle(result)
+  result = collapseTitleDelimiters(result)
+
+  return result || String(value || '').trim()
+}
+
+function stripLeadingBracketSegments(value) {
+  let result = String(value || '').trim()
+  const noisySegment = /^\s*[\[\(【（][^\]\)】）]*(发布|压制|影视|剧集|联盟|论坛|资源|高清|BT|BTHD|BDHD|BTBTT|HDTV|WEB|MP4|MKV|1080|2160|720|www\.|com|cn)[^\]\)】）]*[\]\)】）]\s*/i
+
+  while (noisySegment.test(result)) {
+    result = result.replace(noisySegment, '').trim()
+  }
+
+  return result
+}
+
+function stripLeadingSiteNoise(value) {
+  return String(value || '')
+    .replace(/^\s*(?:www\.[^\s]+|[A-Za-z0-9-]+\.(?:com|cn|net|org|tv|cc))\s*/i, '')
+    .trim()
+}
+
+function stripBracketedAds(value) {
+  return String(value || '')
+    .replace(/[\[\(【（][^\]\)】）]*(?:www\.|https?:\/\/|magnet:|@|\.com|\.cn|\.net|论坛|发布|压制|资源组|影视|剧集)[^\]\)】）]*[\]\)】）]/gi, ' ')
+    .trim()
+}
+
+function stripDecorativeBracketSegments(value) {
+  return String(value || '')
+    .replace(/[\[\(【（][^\]\)】）]*(?:全\s*\d+\s*[集季部期]|字幕|配音|双语|国语|粤语|英语|日语|韩语|普通话|内封|外挂|HDR|WEB|2160|1080|720|4K)[^\]\)】）]*[\]\)】）]/gi, ' ')
+    .trim()
+}
+
+function stripInlineSiteNoise(value) {
+  return String(value || '')
+    .replace(/\b(?:www\.)?[A-Za-z0-9-]+\.(?:com|cn|net|org|tv|cc)\b/gi, ' ')
+    .replace(/\b(?:发布组|压制组|资源组|影视联盟|高清剧集网|高清剧集|高清影视|热播资源|首发)\b/gi, ' ')
+    .trim()
+}
+
+function stripTechnicalSegments(value) {
+  let result = String(value || '')
+
+  for (const definition of fileBadgeDefinitions) {
+    result = result.replace(definition.pattern, ' ')
+  }
+
+  result = result
+    .replace(/\b(?:NF|AMZN|ATVP|DSNP|HQ|UHD|HD|SD|DDP(?:\d(?:\.\d)?)?|DD(?:\d(?:\.\d)?)?|XIAOMI|HOTWEB|ZEROTV|OURTV|MOMOWEB|CMCTV|DREAMHD|HDSKY|HDAREA|CHD|MNHD|FLYTV)\b/gi, ' ')
+    .replace(/(?:^|[\s._-])S\d{1,2}(?:E\d{1,3})?(?=$|[\s._-])/gi, (match) => match)
+    .replace(/(?:^|[\s._-])(?:\d{4})(?=$|[\s._-])/g, (match) => match)
+    .replace(/[-._ ]+[A-Za-z][A-Za-z0-9]{2,}(?=$)/g, ' ')
+
+  return result.trim()
+}
+
+function preferPrimaryLocalizedTitle(value) {
+  const result = String(value || '').trim()
+  if (!/[\u3400-\u9fff]/.test(result)) {
+    return result
+  }
+
+  const englishChunk = result.match(/[A-Za-z][A-Za-z0-9]+(?:\.[A-Za-z0-9]+){1,}.*/)
+  if (!englishChunk?.index) {
+    return result
+  }
+
+  const localized = result.slice(0, englishChunk.index).trim()
+  const episodeToken = extractEpisodeToken(englishChunk[0])
+  return appendEpisodeToken(localized, episodeToken) || result
+}
+
+function collapseTitleDelimiters(value) {
+  return String(value || '')
+    .replace(/^[\s._-]+/, '')
+    .replace(/[\s._-]+$/, '')
+    .replace(/[._]+/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/[·•]+/g, ' ')
+    .replace(/\s*-\s*/g, '-')
+    .trim()
+}
+
+function extractEpisodeToken(value) {
+  const text = String(value || '')
+  if (!text) {
+    return ''
+  }
+
+  const separatedSeasonEpisode = text.match(/(?:^|[\s._-])(S\d{1,2})[\s._-]+(E\d{1,3})(?=$|[\s._-])/i)
+  if (separatedSeasonEpisode) {
+    return `${separatedSeasonEpisode[1]}${separatedSeasonEpisode[2]}`.toUpperCase()
+  }
+
+  const seasonEpisode = text.match(/(?:^|[\s._-])(S\d{1,2}E\d{1,3})(?=$|[\s._-])/i)
+  if (seasonEpisode) {
+    return seasonEpisode[1].toUpperCase()
+  }
+
+  const episode = text.match(/(?:^|[\s._-])((?:EP|E)\d{1,3})(?=$|[\s._-])/i)
+  if (episode) {
+    return episode[1].toUpperCase()
+  }
+
+  const localizedEpisode = text.match(/第\s*\d{1,4}\s*[集话話期]/)
+  if (localizedEpisode) {
+    return localizedEpisode[0].replace(/\s+/g, '')
+  }
+
+  const tokens = text.split(/[\s._-]+/).filter(Boolean)
+  for (let index = tokens.length - 1; index >= 0; index -= 1) {
+    const token = tokens[index]
+    if (!/^\d{1,3}$/.test(token)) {
+      continue
+    }
+
+    const number = Number(token)
+    if (!Number.isInteger(number) || number <= 0 || number > 300) {
+      continue
+    }
+    return token
+  }
+
+  return ''
+}
+
+function appendEpisodeToken(title, token) {
+  const resolvedTitle = String(title || '').trim()
+  const resolvedToken = String(token || '').trim()
+  if (!resolvedTitle || !resolvedToken) {
+    return resolvedTitle
+  }
+
+  const tokenPattern = new RegExp(`(?:^|[\\s._-])${escapeRegExp(resolvedToken)}(?=$|[\\s._-])`, 'i')
+  if (tokenPattern.test(resolvedTitle)) {
+    return resolvedTitle
+  }
+
+  return `${resolvedTitle} ${resolvedToken}`
+}
+
+function escapeRegExp(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function extractFileBadges(name) {

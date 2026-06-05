@@ -1,7 +1,10 @@
 <script setup>
+import { computed } from 'vue'
+
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
   selectedItem: { type: Object, default: null },
+  playerOptions: { type: Array, default: () => [] },
   selectedResumeText: { type: String, default: '' },
   selectedSubtitleName: { type: String, default: '' },
   selectedLastPlayedText: { type: String, default: '' },
@@ -11,6 +14,7 @@ const emit = defineEmits([
   'update:modelValue',
   'primary-action',
   'play',
+  'play-with-player',
   'builtin-play',
   'play-from-start',
   'jump',
@@ -18,6 +22,21 @@ const emit = defineEmits([
   'clear-subtitle',
   'clear-progress',
 ])
+
+const selectablePlayers = computed(() =>
+  props.playerOptions.filter((player) => player?.supported && !player.disabled),
+)
+
+function playWithPlayer(player) {
+  if (!props.selectedItem || !player?.id || !player.available) {
+    return
+  }
+
+  emit('play-with-player', {
+    item: props.selectedItem,
+    playerId: player.id,
+  })
+}
 </script>
 
 <template>
@@ -69,14 +88,56 @@ const emit = defineEmits([
           </v-btn>
 
           <template v-else-if="props.selectedItem.isVideo">
-            <v-btn
-              color="primary"
-              block
-              prepend-icon="mdi-play-circle-outline"
-              @click="emit('play', props.selectedItem)"
-            >
-              立即播放
-            </v-btn>
+            <div class="detail-play-split">
+              <v-btn
+                class="detail-play-main"
+                color="primary"
+                prepend-icon="mdi-play-circle-outline"
+                @click="emit('play', props.selectedItem)"
+              >
+                立即播放
+              </v-btn>
+              <v-menu location="bottom end">
+                <template #activator="{ props: menuProps }">
+                  <v-btn
+                    v-bind="menuProps"
+                    class="detail-play-toggle"
+                    color="primary"
+                    title="选择播放器"
+                    aria-label="选择播放器"
+                    :disabled="selectablePlayers.length === 0"
+                  >
+                    <v-icon icon="mdi-chevron-down" size="18" />
+                  </v-btn>
+                </template>
+
+                <v-list class="detail-player-menu" density="compact" min-width="220">
+                  <v-list-item
+                    v-for="player in selectablePlayers"
+                    :key="player.id"
+                    :disabled="!player.available"
+                    @click="playWithPlayer(player)"
+                  >
+                    <template #prepend>
+                      <v-icon
+                        :color="player.available ? 'primary' : 'medium-emphasis'"
+                        :icon="player.available ? 'mdi-play-circle-outline' : 'mdi-alert-circle-outline'"
+                      />
+                    </template>
+                    <v-list-item-title>{{ player.name }}</v-list-item-title>
+                    <v-list-item-subtitle>
+                      {{
+                        player.available
+                          ? player.selected
+                            ? '当前默认'
+                            : '使用此播放器播放'
+                          : '未检测到可执行文件'
+                      }}
+                    </v-list-item-subtitle>
+                  </v-list-item>
+                </v-list>
+              </v-menu>
+            </div>
             <v-btn
               variant="tonal"
               block
@@ -105,6 +166,16 @@ const emit = defineEmits([
         </div>
 
         <v-list class="mt-4" density="compact" lines="two">
+          <v-list-item
+            v-if="props.selectedItem.originalName && props.selectedItem.originalName !== props.selectedItem.displayName"
+            title="原始文件名"
+            :subtitle="props.selectedItem.originalName"
+          />
+          <v-list-item
+            v-if="props.selectedItem.isHiddenFile"
+            title="隐私状态"
+            subtitle="115 隐私文件"
+          />
           <v-list-item title="类型" :subtitle="props.selectedItem.kindLabel" />
           <v-list-item title="大小" :subtitle="props.selectedItem.sizeText" />
           <v-list-item title="更新时间" :subtitle="props.selectedItem.updatedText" />

@@ -125,3 +125,13 @@ export function extractErrorMessage(error) {
 export function isAppNotReadyError(error) {
   return extractErrorMessage(error).toLowerCase().includes("app not ready");
 }
+
+export function isUserCancelledError(error) {
+  const message = extractErrorMessage(error).toLowerCase();
+  return (
+    message.includes("cancelled by user") ||
+    message.includes("canceled by user") ||
+    message.includes("operation was canceled") ||
+    message.includes("operation cancelled")
+  );
+}

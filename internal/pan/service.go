@@ -1,7 +1,9 @@
 package pan
 
 import (
+	"crypto/md5"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"net/url"
@@ -47,6 +49,7 @@ type FileItem struct {
 	PickCode     string `json:"pickCode"`
 	IsDirectory  bool   `json:"isDirectory"`
 	IsVideo      bool   `json:"isVideo"`
+	IsHiddenFile bool   `json:"isHiddenFile"`
 	UpdatedAt    string `json:"updatedAt"`
 	DurationSec  int64  `json:"durationSec,omitempty"`
 	ResumeMS     int64  `json:"resumeMs,omitempty"`
@@ -81,6 +84,12 @@ type LoginStatusView struct {
 	User     *UserView `json:"user,omitempty"`
 }
 
+type HiddenModeStatusView struct {
+	Enabled            bool   `json:"enabled"`
+	Message            string `json:"message,omitempty"`
+	RememberedPassword bool   `json:"rememberedPassword,omitempty"`
+}
+
 type loginSession struct {
 	id        string
 	client    *driver.Pan115Client
@@ -95,6 +104,7 @@ type Service struct {
 	credential *config.Credential
 	cookies    map[string]string
 	user       *UserView
+	hiddenMode bool
 	sessions   map[string]*loginSession
 }
 
@@ -240,6 +250,7 @@ func (s *Service) Restore(credential *config.Credential, cookies map[string]stri
 	s.credential = normalized
 	s.cookies = snapshot
 	s.user = view
+	s.hiddenMode = false
 	s.mu.Unlock()
 
 	return true, view, nil
@@ -264,7 +275,105 @@ func (s *Service) Logout() {
 	s.credential = nil
 	s.cookies = nil
 	s.user = nil
+	s.hiddenMode = false
 	s.sessions = make(map[string]*loginSession)
+}
+
+func (s *Service) HiddenModeStatus() HiddenModeStatusView {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return HiddenModeStatusView{
+		Enabled: s.hiddenMode,
+	}
+}
+
+func (s *Service) RestoreHiddenMode(enabled bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.hiddenMode = enabled
+}
+
+func (s *Service) SetHiddenMode(show bool, password string, passwordMD5 string) (*HiddenModeStatusView, error) {
+	client, err := s.authenticatedClient()
+	if err != nil {
+		return nil, err
+	}
+
+	params := map[string]string{
+		"show": "0",
+	}
+
+	if show {
+		password = strings.TrimSpace(password)
+		passwordMD5 = strings.TrimSpace(strings.ToLower(passwordMD5))
+		if password == "" && passwordMD5 == "" {
+			return nil, errors.New("请输入隐私模式密码")
+		}
+		params["show"] = "1"
+		if passwordMD5 != "" {
+			params["safe_pwd_md5"] = passwordMD5
+		} else {
+			params["safe_pwd_md5"] = md5Hex(password)
+		}
+	}
+
+	body := map[string]any{}
+	resp, err := client.NewRequest().
+		SetQueryParams(map[string]string{
+			"ct": "hiddenfiles",
+			"ac": "switching",
+		}).
+		SetFormData(params).
+		ForceContentType("application/x-www-form-urlencoded; charset=UTF-8").
+		SetResult(&body).
+		Post("https://115.com/")
+	if err != nil {
+		return nil, normalizeRemoteJSONHTMLError(err, "切换 115 隐私模式失败")
+	}
+
+	if resp == nil {
+		return nil, errors.New("切换 115 隐私模式失败")
+	}
+
+	if len(body) == 0 {
+		decoded, decodeErr := decodeObject(resp.Body())
+		if decodeErr != nil {
+			return nil, normalizeRemoteJSONHTMLError(decodeErr, "115 隐私模式返回了无法识别的数据")
+		}
+		body = decoded
+	}
+
+	if !isSuccessBody(body) && asInt64(body["state"]) != 1 {
+		return nil, normalizeHiddenModeError(body, show)
+	}
+
+	message := strings.TrimSpace(firstNonEmpty(
+		asString(body["message"]),
+		asString(body["msg"]),
+		asString(body["error"]),
+	))
+	if message == "" {
+		if show {
+			message = "隐私模式已开启"
+		} else {
+			message = "隐私模式已关闭"
+		}
+	}
+
+	snapshot := exportCookies(client)
+
+	s.mu.Lock()
+	s.cookies = snapshot
+	s.hiddenMode = show
+	s.mu.Unlock()
+
+	return &HiddenModeStatusView{
+		Enabled:            show,
+		Message:            message,
+		RememberedPassword: show && params["safe_pwd_md5"] != "",
+	}, nil
 }
 
 func (s *Service) ListDirectory(dirID string, offset, limit int) (*DirectoryView, error) {
@@ -630,4 +739,52 @@ func cookiesToHeader(cookies map[string]string) string {
 	}
 
 	return strings.Join(parts, "; ")
+}
+
+func md5Hex(value string) string {
+	sum := md5.Sum([]byte(value))
+	return hex.EncodeToString(sum[:])
+}
+
+func MD5HexForClient(value string) string {
+	return md5Hex(strings.TrimSpace(value))
+}
+
+func normalizeHiddenModeError(body map[string]any, show bool) error {
+	code := int(asInt64(body["errno"]))
+	if code == 0 {
+		code = int(asInt64(body["errNo"]))
+	}
+	if code == 0 {
+		code = int(asInt64(body["code"]))
+	}
+
+	message := strings.TrimSpace(firstNonEmpty(
+		asString(body["message"]),
+		asString(body["msg"]),
+		asString(body["error"]),
+	))
+
+	if code != 0 {
+		err := driver.GetErr(code, message)
+		if errors.Is(err, driver.ErrPasswordIncorrect) {
+			return errors.New("隐私模式密码错误")
+		}
+		if err != nil && err != driver.ErrUnexpected {
+			return normalizeRemoteJSONHTMLError(err, "切换 115 隐私模式失败")
+		}
+	}
+
+	if message != "" {
+		lower := strings.ToLower(message)
+		if strings.Contains(lower, "password incorrect") || strings.Contains(message, "密码错误") {
+			return errors.New("隐私模式密码错误")
+		}
+		return normalizeRemoteJSONHTMLError(errors.New(message), "切换 115 隐私模式失败")
+	}
+
+	if show {
+		return errors.New("开启隐私模式失败")
+	}
+	return errors.New("关闭隐私模式失败")
 }

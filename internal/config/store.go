@@ -31,15 +31,18 @@ type DirectoryTarget struct {
 }
 
 type Settings struct {
-	PreferredPlayer      string            `json:"preferredPlayer,omitempty"`
-	PlayerPaths          map[string]string `json:"playerPaths,omitempty"`
-	DisabledPlayers      map[string]bool   `json:"disabledPlayers,omitempty"`
-	MPVPath              string            `json:"mpvPath,omitempty"`
-	HideTitleBadges      bool              `json:"hideTitleBadges,omitempty"`
-	HideSmallFiles       bool              `json:"hideSmallFiles,omitempty"`
-	SmallFileFilterMB    int               `json:"smallFileFilterMB,omitempty"`
-	FileListDensity      string            `json:"fileListDensity,omitempty"`
-	OfflineRecentTargets []DirectoryTarget `json:"offlineRecentTargets,omitempty"`
+	PreferredPlayer          string            `json:"preferredPlayer,omitempty"`
+	PlayerPaths              map[string]string `json:"playerPaths,omitempty"`
+	DisabledPlayers          map[string]bool   `json:"disabledPlayers,omitempty"`
+	MPVPath                  string            `json:"mpvPath,omitempty"`
+	HideTitleBadges          bool              `json:"hideTitleBadges,omitempty"`
+	DisableCleanTitleDisplay bool              `json:"disableCleanTitleDisplay,omitempty"`
+	UIScalePercent           int               `json:"uiScalePercent,omitempty"`
+	ThemeMode                string            `json:"themeMode,omitempty"`
+	HideSmallFiles           bool              `json:"hideSmallFiles,omitempty"`
+	SmallFileFilterMB        int               `json:"smallFileFilterMB,omitempty"`
+	FileListDensity          string            `json:"fileListDensity,omitempty"`
+	OfflineRecentTargets     []DirectoryTarget `json:"offlineRecentTargets,omitempty"`
 }
 
 type PlaybackRecord struct {
@@ -58,12 +61,14 @@ type WindowState struct {
 }
 
 type State struct {
-	Settings        Settings                  `json:"settings"`
-	Credential      *Credential               `json:"credential,omitempty"`
-	Cookies         map[string]string         `json:"cookies,omitempty"`
-	LastDirectoryID string                    `json:"lastDirectoryId"`
-	PlaybackRecords map[string]PlaybackRecord `json:"playbackRecords,omitempty"`
-	Window          WindowState               `json:"window,omitempty"`
+	Settings              Settings                  `json:"settings"`
+	Credential            *Credential               `json:"credential,omitempty"`
+	Cookies               map[string]string         `json:"cookies,omitempty"`
+	HiddenModeEnabled     bool                      `json:"hiddenModeEnabled,omitempty"`
+	HiddenModePasswordMD5 string                    `json:"hiddenModePasswordMd5,omitempty"`
+	LastDirectoryID       string                    `json:"lastDirectoryId"`
+	PlaybackRecords       map[string]PlaybackRecord `json:"playbackRecords,omitempty"`
+	Window                WindowState               `json:"window,omitempty"`
 }
 
 type Store struct {
@@ -78,6 +83,8 @@ func DefaultState() State {
 			PreferredPlayer:      "mpv",
 			PlayerPaths:          map[string]string{},
 			DisabledPlayers:      map[string]bool{},
+			UIScalePercent:       100,
+			ThemeMode:            "system",
 			FileListDensity:      "default",
 			OfflineRecentTargets: []DirectoryTarget{},
 		},
@@ -284,6 +291,8 @@ func normalizeSettings(settings Settings) Settings {
 	}
 	settings.SmallFileFilterMB = normalizeSmallFileFilterMB(settings.SmallFileFilterMB)
 	settings.FileListDensity = normalizeFileListDensity(settings.FileListDensity)
+	settings.UIScalePercent = normalizeUIScalePercent(settings.UIScalePercent)
+	settings.ThemeMode = normalizeThemeMode(settings.ThemeMode)
 	settings.OfflineRecentTargets = NormalizeOfflineRecentTargets(settings.OfflineRecentTargets)
 	settings.HideSmallFiles = false
 	return settings
@@ -413,6 +422,25 @@ func normalizeFileListDensity(value string) string {
 	}
 }
 
+func normalizeUIScalePercent(value int) int {
+	if value < 100 {
+		return 100
+	}
+	if value > 150 {
+		return 150
+	}
+	return ((value + 2) / 5) * 5
+}
+
+func normalizeThemeMode(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "light", "dark":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return "system"
+	}
+}
+
 func normalizeState(state State) State {
 	state.Settings = normalizeSettings(state.Settings)
 	if state.Credential != nil {
@@ -430,6 +458,7 @@ func normalizeState(state State) State {
 	if state.Cookies == nil {
 		state.Cookies = map[string]string{}
 	}
+	state.HiddenModePasswordMD5 = strings.TrimSpace(state.HiddenModePasswordMD5)
 	if state.PlaybackRecords == nil {
 		state.PlaybackRecords = map[string]PlaybackRecord{}
 	}

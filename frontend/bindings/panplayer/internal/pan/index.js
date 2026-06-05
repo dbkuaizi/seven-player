@@ -6,6 +6,7 @@ export {
     Breadcrumb,
     DirectoryView,
     FileItem,
+    HiddenModeStatusView,
     LoginSessionView,
     LoginStatusView,
     OfflineListView,

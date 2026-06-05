@@ -7,6 +7,7 @@ func cloneState(state config.State) config.State {
 	cloned.Settings = cloneSettings(state.Settings)
 	cloned.Cookies = cloneStringMap(state.Cookies)
 	cloned.PlaybackRecords = clonePlaybackRecords(state.PlaybackRecords)
+	cloned.HiddenModePasswordMD5 = state.HiddenModePasswordMD5
 	if state.Credential != nil {
 		credential := *state.Credential
 		cloned.Credential = &credential

@@ -18,6 +18,23 @@ import 'vidstack/define/media-community-skin.js'
 const vuetify = createVuetify({
   components,
   directives,
+  theme: {
+    defaultTheme: 'light',
+    themes: {
+      light: {
+        dark: false,
+        colors: {
+          primary: '#1867c0',
+        },
+      },
+      dark: {
+        dark: true,
+        colors: {
+          primary: '#74a7ff',
+        },
+      },
+    },
+  },
   icons: {
     defaultSet: 'mdi',
     aliases,

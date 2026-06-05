@@ -7,6 +7,7 @@ import {
   ref,
   watch,
 } from "vue";
+import { useTheme } from "vuetify";
 import {
   AddOfflineTasks,
   Bootstrap,
@@ -19,6 +20,7 @@ import {
   PrepareBuiltinPlayback,
   PreviewDirectory,
   SavePlaybackProgress,
+  SetHiddenMode,
   SearchFiles,
   SelectSubtitlePath,
   SelectTorrentFileAsMagnet,
@@ -26,6 +28,7 @@ import {
 import { Clipboard } from "@wailsio/runtime";
 import AppSidebar from "./components/app/AppSidebar.vue";
 import NoticeSnackbar from "./components/app/NoticeSnackbar.vue";
+import HiddenModeDialog from "./components/auth/HiddenModeDialog.vue";
 import LoginDialog from "./components/auth/LoginDialog.vue";
 import DownloadDialog from "./components/downloads/DownloadDialog.vue";
 import DownloadsPage from "./components/downloads/DownloadsPage.vue";
@@ -62,7 +65,7 @@ import {
   normalizeBreadcrumbPath,
   resolveDirectoryPath,
 } from "./utils/breadcrumbs";
-import { isAppNotReadyError } from "./utils/error";
+import { isAppNotReadyError, isUserCancelledError } from "./utils/error";
 import { sanitizeErrorMessage } from "./utils/error";
 import {
   compareItems,
@@ -76,7 +79,11 @@ import {
   offlineTaskMetaText,
 } from "./utils/offlineState";
 import { createEmptyBuiltinPlayer } from "./utils/playback";
-import { normalizeFileListDensity } from "./utils/settings";
+import {
+  normalizeFileListDensity,
+  normalizeThemeMode,
+  normalizeUIScalePercent,
+} from "./utils/settings";
 import {
   basename,
   normalizeMultilineInput,
@@ -93,10 +100,16 @@ const downloadLoading = ref(false);
 const downloadSubmitting = ref(false);
 const folderPickerLoading = ref(false);
 const torrentSelecting = ref(false);
+const hiddenModeLoading = ref(false);
 
 const loggedIn = ref(false);
 const user = ref(null);
 const proxyBase = ref("");
+const hiddenModeEnabled = ref(false);
+const hiddenModeDialog = ref(false);
+const hiddenModePassword = ref("");
+const hiddenModeRememberPassword = ref(false);
+const hiddenModeRememberedPasswordAvailable = ref(false);
 
 const currentDir = ref("0");
 const parentId = ref("");
@@ -129,8 +142,49 @@ const builtinPlayerDialog = ref(false);
 const builtinPlayerLoading = ref(false);
 const builtinPlayer = ref(createEmptyBuiltinPlayer());
 const builtinPlayerSeekKey = ref("");
+const theme = useTheme();
+const systemDarkQuery =
+  typeof window !== "undefined" && window.matchMedia
+    ? window.matchMedia("(prefers-color-scheme: dark)")
+    : null;
+const systemPrefersDark = ref(Boolean(systemDarkQuery?.matches));
+const activeThemeMode = ref("system");
 
 const { notice, showNotice, showError, closeNotice } = useNotice();
+
+function applyUIScale(value) {
+  const scale = normalizeUIScalePercent(value);
+  document.documentElement.style.setProperty(
+    "--app-font-scale",
+    String(scale / 100),
+  );
+}
+
+function resolvedThemeName(mode = activeThemeMode.value) {
+  const normalized = normalizeThemeMode(mode);
+  if (normalized === "dark") {
+    return "dark";
+  }
+  if (normalized === "light") {
+    return "light";
+  }
+  return systemPrefersDark.value ? "dark" : "light";
+}
+
+function applyThemeMode(value) {
+  activeThemeMode.value = normalizeThemeMode(value);
+  theme.global.name.value = resolvedThemeName();
+  document.documentElement.style.colorScheme = theme.global.current.value.dark
+    ? "dark"
+    : "light";
+}
+
+function handleSystemThemeChange(event) {
+  systemPrefersDark.value = Boolean(event?.matches);
+  if (activeThemeMode.value === "system") {
+    applyThemeMode("system");
+  }
+}
 
 const {
   loginLoading,
@@ -156,6 +210,11 @@ const {
   onLoggedOut: () => {
     searchQuery.value = "";
     downloadState.value = createEmptyOfflineState();
+    hiddenModeEnabled.value = false;
+    hiddenModeDialog.value = false;
+    hiddenModePassword.value = "";
+    hiddenModeRememberPassword.value = false;
+    hiddenModeRememberedPasswordAvailable.value = false;
     resetDirectoryState();
   },
 });
@@ -168,6 +227,9 @@ const {
   playerOptions,
   applySettingsView,
   saveShowTitleBadges,
+  saveCleanTitleDisplay,
+  saveUIScale,
+  saveThemeMode,
   saveSmallFileFilter,
   saveFileListDensity,
   choosePlayerPath,
@@ -178,6 +240,8 @@ const {
   showNotice,
   showError,
   refreshFilePresentation,
+  applyUIScale,
+  applyThemeMode,
 });
 
 const downloadDialog = ref(false);
@@ -576,6 +640,8 @@ watch(filteredDownloadTasks, (tasks) => {
 
 onMounted(async () => {
   window.addEventListener("keydown", handleKeydown);
+  systemDarkQuery?.addEventListener?.("change", handleSystemThemeChange);
+  applyThemeMode(activeThemeMode.value);
   await bootstrapApp();
 });
 
@@ -583,6 +649,7 @@ onBeforeUnmount(() => {
   clearPolling();
   clearSearchDebounce();
   window.removeEventListener("keydown", handleKeydown);
+  systemDarkQuery?.removeEventListener?.("change", handleSystemThemeChange);
 });
 
 async function bootstrapApp() {
@@ -593,6 +660,12 @@ async function bootstrapApp() {
     proxyBase.value = boot?.proxyBase || "";
     loggedIn.value = Boolean(boot?.loggedIn);
     user.value = boot?.user ?? null;
+    hiddenModeEnabled.value = Boolean(boot?.hiddenMode?.enabled);
+    hiddenModeRememberedPasswordAvailable.value = Boolean(
+      boot?.hiddenModePasswordRemembered,
+    );
+    hiddenModeRememberPassword.value =
+      hiddenModeRememberedPasswordAvailable.value;
     applySettingsView(boot?.settings);
     currentDir.value = boot?.currentId || "0";
 
@@ -816,6 +889,72 @@ async function handleLogout() {
   }
 }
 
+function openHiddenModeDialog() {
+  if (!loggedIn.value) {
+    showNotice("info", "请先登录 115 账号。");
+    return;
+  }
+  hiddenModePassword.value = "";
+  hiddenModeRememberPassword.value =
+    hiddenModeRememberedPasswordAvailable.value;
+  hiddenModeDialog.value = true;
+}
+
+function closeHiddenModeDialog() {
+  hiddenModeDialog.value = false;
+  hiddenModePassword.value = "";
+}
+
+async function enableHiddenMode() {
+  openHiddenModeDialog();
+}
+
+async function confirmEnableHiddenMode() {
+  const password = String(hiddenModePassword.value || "").trim();
+  if (!password && !hiddenModeRememberedPasswordAvailable.value) {
+    showNotice("warning", "请输入隐私模式密码。");
+    return;
+  }
+
+  hiddenModeLoading.value = true;
+  try {
+    const status = await SetHiddenMode(
+      true,
+      password,
+      Boolean(hiddenModeRememberPassword.value),
+    );
+    hiddenModeEnabled.value = Boolean(status?.enabled);
+    hiddenModeRememberedPasswordAvailable.value = Boolean(
+      hiddenModeRememberPassword.value,
+    );
+    closeHiddenModeDialog();
+    await reloadCurrentDirectory();
+    showNotice("success", status?.message || "隐私模式已开启。");
+  } catch (error) {
+    showError(error, "开启隐私模式失败");
+  } finally {
+    hiddenModeLoading.value = false;
+  }
+}
+
+async function disableHiddenMode() {
+  if (!loggedIn.value) {
+    return;
+  }
+
+  hiddenModeLoading.value = true;
+  try {
+    const status = await SetHiddenMode(false, "", false);
+    hiddenModeEnabled.value = Boolean(status?.enabled);
+    await reloadCurrentDirectory();
+    showNotice("info", status?.message || "隐私模式已关闭。");
+  } catch (error) {
+    showError(error, "关闭隐私模式失败");
+  } finally {
+    hiddenModeLoading.value = false;
+  }
+}
+
 function openDetails(item) {
   selectedItem.value = item;
   detailDrawer.value = true;
@@ -878,6 +1017,7 @@ async function playVideo(item, options = {}) {
       startMs: options.startMs || 0,
       fromStart: Boolean(options.fromStart),
       subtitle: options.subtitle || item.subtitlePath || "",
+      playerId: options.playerId || "",
     });
 
     applyPlaybackState(item.pickCode, {
@@ -913,6 +1053,12 @@ async function playVideo(item, options = {}) {
   } finally {
     actionLoading.value = false;
   }
+}
+
+async function playVideoWithPlayer(payload) {
+  await playVideo(payload?.item, {
+    playerId: payload?.playerId || "",
+  });
 }
 
 async function openBuiltinPlayer(
@@ -1095,6 +1241,9 @@ async function chooseSubtitle(item = selectedItem.value) {
       );
     }
   } catch (error) {
+    if (isUserCancelledError(error)) {
+      return;
+    }
     showError(error, "选择字幕失败");
   } finally {
     actionLoading.value = false;
@@ -1262,6 +1411,10 @@ function openSearchInput() {
   searchExpanded.value = true;
 }
 
+function collapseSearchInput() {
+  searchExpanded.value = false;
+}
+
 function closeSearchInput() {
   clearSearchDebounce();
   searchRequestId.value += 1;
@@ -1269,14 +1422,18 @@ function closeSearchInput() {
   searchResults.value = [];
   searchTotal.value = 0;
   searchPage.value = 1;
-  searchExpanded.value = false;
+  collapseSearchInput();
 }
 
 function toggleSearchInput() {
   if (!loggedIn.value) {
     return;
   }
-  if (isSearchInputVisible.value) {
+  if (searchExpanded.value) {
+    if (isGlobalSearchActive.value) {
+      collapseSearchInput();
+      return;
+    }
     closeSearchInput();
     return;
   }
@@ -1286,7 +1443,7 @@ function toggleSearchInput() {
 function handleSearchBlur() {
   window.setTimeout(() => {
     if (!searchQuery.value.trim()) {
-      searchExpanded.value = false;
+      collapseSearchInput();
     }
   }, 120);
 }
@@ -1357,6 +1514,18 @@ async function handlePageSizeChange(value) {
 function handleFileListDensityInput(value) {
   saveFileListDensity(value).catch((error) =>
     showError(error, "保存文件列表密度失败"),
+  );
+}
+
+function handleUIScaleInput(value) {
+  saveUIScale(value).catch((error) =>
+    showError(error, "保存界面缩放失败"),
+  );
+}
+
+function handleThemeModeInput(value) {
+  saveThemeMode(value).catch((error) =>
+    showError(error, "保存外观模式失败"),
   );
 }
 
@@ -1633,6 +1802,7 @@ function handleKeydown(event) {
 function normalizeItem(item) {
   return normalizeFileItem(item, {
     showTitleBadges: settings.value?.showTitleBadges,
+    cleanTitleDisplay: settings.value?.cleanTitleDisplay,
   });
 }
 
@@ -1644,10 +1814,17 @@ function refreshFilePresentation() {
       name: item.originalName || item.name,
     }),
   );
+  searchResults.value = searchResults.value.map((item) =>
+    normalizeItem({
+      ...item,
+      name: item.originalName || item.name,
+    }),
+  );
 
   if (selectedKey) {
     selectedItem.value =
       items.value.find((item) => item.rowKey === selectedKey) ??
+      searchResults.value.find((item) => item.rowKey === selectedKey) ??
       selectedItem.value;
   }
 }
@@ -1704,6 +1881,8 @@ function sleep(ms) {
               :search-summary-text="searchSummaryText"
               :breadcrumb-display-items="breadcrumbDisplayItems"
               :search-input-visible="isSearchInputVisible"
+              :hidden-mode-enabled="hiddenModeEnabled"
+              :hidden-mode-loading="hiddenModeLoading"
               :small-file-filter-m-b="smallFileFilterMB"
               :settings="settings"
               :type-options="typeOptions"
@@ -1725,6 +1904,7 @@ function sleep(ms) {
               @open-login="openLoginDialog"
               @open-breadcrumb="openBreadcrumb"
               @reload="reloadCurrentDirectory"
+              @toggle-hidden-mode="hiddenModeEnabled ? disableHiddenMode() : enableHiddenMode()"
               @toggle-search="toggleSearchInput"
               @search-blur="handleSearchBlur"
               @search-clear="handleSearchClear"
@@ -1732,6 +1912,7 @@ function sleep(ms) {
               @save-small-file-filter="saveSmallFileFilter"
               @save-file-list-density="handleFileListDensityInput"
               @save-show-title-badges="saveShowTitleBadges"
+              @save-clean-title-display="saveCleanTitleDisplay"
               @open-details="openDetails"
               @primary-action="handlePrimaryAction"
               @page-size-change="handlePageSizeChange"
@@ -1773,6 +1954,9 @@ function sleep(ms) {
               :settings="settings"
               :player-options="playerOptions"
               :player-loading="playerLoading"
+              @preview-ui-scale="applyUIScale"
+              @save-ui-scale="handleUIScaleInput"
+              @save-theme-mode="handleThemeModeInput"
               @select-player="selectPlayerFromList"
               @choose-player-path="choosePlayerPath"
               @toggle-player-disabled="togglePlayerDisabled"
@@ -1787,11 +1971,13 @@ function sleep(ms) {
       <FileDetailDrawer
         v-model="detailDrawer"
         :selected-item="selectedItem"
+        :player-options="playerOptions"
         :selected-resume-text="selectedResumeText"
         :selected-subtitle-name="selectedSubtitleName"
         :selected-last-played-text="selectedLastPlayedText"
         @primary-action="handlePrimaryAction"
         @play="playVideo"
+        @play-with-player="playVideoWithPlayer"
         @builtin-play="openBuiltinPlayer"
         @play-from-start="(item) => playVideo(item, { fromStart: true })"
         @jump="openJumpDialog"
@@ -1813,6 +1999,16 @@ function sleep(ms) {
       @start-login="startLogin"
       @paste-cookie="pasteCookieFromClipboard"
       @submit-cookie="submitCookieLogin"
+    />
+
+    <HiddenModeDialog
+      v-model="hiddenModeDialog"
+      v-model:password="hiddenModePassword"
+      v-model:remember-password="hiddenModeRememberPassword"
+      :remembered-password-available="hiddenModeRememberedPasswordAvailable"
+      :loading="hiddenModeLoading"
+      @close="closeHiddenModeDialog"
+      @confirm="confirmEnableHiddenMode"
     />
 
     <DownloadDialog

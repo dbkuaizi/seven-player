@@ -1,6 +1,10 @@
 package pan
 
-import "testing"
+import (
+	"crypto/md5"
+	"encoding/hex"
+	"testing"
+)
 
 func TestIsVideo(t *testing.T) {
 	cases := []struct {
@@ -36,5 +40,13 @@ func TestBreadcrumbsFromRawPath(t *testing.T) {
 	}
 	if got[1].Name != "爆米花TV" || got[2].Name != "电视剧" {
 		t.Fatalf("unexpected breadcrumbs: %+v", got)
+	}
+}
+
+func TestMD5Hex(t *testing.T) {
+	want := md5.Sum([]byte("123456"))
+	got := md5Hex("123456")
+	if got != hex.EncodeToString(want[:]) {
+		t.Fatalf("md5Hex mismatch: got %q want %q", got, hex.EncodeToString(want[:]))
 	}
 }
