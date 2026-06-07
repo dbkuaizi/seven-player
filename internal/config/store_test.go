@@ -8,7 +8,7 @@ import (
 
 func TestStoreRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	store, err := NewStore(filepath.Join(dir, "panplayer.sqlite"))
+	store, err := NewStore(filepath.Join(dir, "seven-player.sqlite"))
 	if err != nil {
 		t.Fatalf("NewStore() error = %v", err)
 	}
@@ -44,9 +44,9 @@ func TestStoreRoundTrip(t *testing.T) {
 			"SEID": "s",
 			"KID":  "k",
 		},
-		HiddenModeEnabled: true,
+		HiddenModeEnabled:     true,
 		HiddenModePasswordMD5: "abc123md5",
-		LastDirectoryID: "123",
+		LastDirectoryID:       "123",
 		PlaybackRecords: map[string]PlaybackRecord{
 			"pc1": {
 				PickCode:       "pc1",
@@ -193,7 +193,7 @@ func TestNewStoreMigratesLegacyJSON(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	store, err := NewStore(filepath.Join(dir, "panplayer.sqlite"))
+	store, err := NewStore(filepath.Join(dir, "seven-player.sqlite"))
 	if err != nil {
 		t.Fatalf("NewStore() error = %v", err)
 	}
@@ -208,6 +208,43 @@ func TestNewStoreMigratesLegacyJSON(t *testing.T) {
 		t.Fatalf("LastDirectoryID mismatch: got %q want %q", got.LastDirectoryID, "456")
 	}
 	if got.Cookies["UID"] != "demo" {
+		t.Fatalf("cookies mismatch: %+v", got.Cookies)
+	}
+}
+
+func TestNewStoreMigratesLegacySQLite(t *testing.T) {
+	dir := t.TempDir()
+	legacyStore, err := NewStore(filepath.Join(dir, "panplayer.sqlite"))
+	if err != nil {
+		t.Fatalf("NewStore(legacy) error = %v", err)
+	}
+	if err := legacyStore.Save(State{
+		LastDirectoryID: "789",
+		Cookies: map[string]string{
+			"UID": "legacy",
+		},
+	}); err != nil {
+		t.Fatalf("Save(legacy) error = %v", err)
+	}
+	if err := legacyStore.Close(); err != nil {
+		t.Fatalf("Close(legacy) error = %v", err)
+	}
+
+	store, err := NewStore(filepath.Join(dir, "seven-player.sqlite"))
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+	defer store.Close()
+
+	got, err := store.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if got.LastDirectoryID != "789" {
+		t.Fatalf("LastDirectoryID mismatch: got %q want %q", got.LastDirectoryID, "789")
+	}
+	if got.Cookies["UID"] != "legacy" {
 		t.Fatalf("cookies mismatch: %+v", got.Cookies)
 	}
 }

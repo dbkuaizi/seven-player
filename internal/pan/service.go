@@ -13,16 +13,17 @@ import (
 	"sync"
 	"time"
 
-	"panplayer/internal/config"
+	"sevenplayer/internal/config"
 
 	"github.com/google/uuid"
-driver "github.com/jianxcao/115driver/pkg/driver"
+	driver "github.com/jianxcao/115driver/pkg/driver"
 )
 
 const (
 	fileAPIRetryCount = 2
 	fileAPIRetryDelay = 350 * time.Millisecond
 )
+
 type UserView struct {
 	UserID      int64  `json:"userId"`
 	UserName    string `json:"userName"`

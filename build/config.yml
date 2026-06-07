@@ -6,11 +6,11 @@ version: '3'
 # This information is used to generate the build assets.
 info:
   companyName: "OpenAI Codex" # The name of the company
-  productName: "PanPlayer 115" # The name of the application
-  productIdentifier: "com.panplayer.panplayer115" # The unique product identifier
-  description: "PanPlayer 115" # The application description
+  productName: "Seven Player" # The name of the application
+  productIdentifier: "cool.cnb.dbkuaizi.sevenplayer" # The unique product identifier
+  description: "Seven Player" # The application description
   copyright: "(c) 2026, OpenAI Codex" # Copyright text
-  comments: "PanPlayer 115" # Comments
+  comments: "Seven Player" # Comments
   version: "0.1.0" # The application version
   # cfBundleIconName: "appicon" # The macOS icon name in Assets.car icon bundles (optional)
   #                               # Should match the name of your .icon file without the extension

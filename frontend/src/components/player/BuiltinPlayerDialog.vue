@@ -44,7 +44,7 @@ function handleCanPlay() {
       <div class="builtin-player-header">
         <div class="min-w-0">
           <div class="text-subtitle-1 font-weight-medium text-truncate">
-            {{ props.player.title || 'PanPlayer 115' }}
+            {{ props.player.title || 'Seven Player' }}
           </div>
           <div class="builtin-player-meta">
             <v-chip

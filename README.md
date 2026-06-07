@@ -1,6 +1,6 @@
-# PanPlayer 115
+# Seven Player
 
-`PanPlayer 115` 是一个用 `Go + Wails v3 + Vue 3 + Vuetify` 实现的桌面播放器原型：
+`Seven Player` 是一个用 `Go + Wails v3 + Vue 3 + Vuetify` 实现的桌面播放器原型：
 
 - 启动后直接展示 115 网盘目录
 - 用 115 官方二维码接口扫码登录
@@ -51,14 +51,14 @@ wails3 build
 
 当前仓库已按 Windows 本地开发做了精简。默认构建产物在：
 
-- `bin/panplayer115.exe`
-- 安装器：`build/windows/nsis/panplayer115-installer.exe`
+- `bin/seven-player.exe`
+- 安装器：`build/windows/nsis/seven-player-installer.exe`
 
 ## 凭证与设置
 
-本地配置文件默认保存在：
+本地配置文件默认保存在程序目录：
 
-- Windows: `%AppData%\\panplayer\\config.json`
+- `seven-player.sqlite`
 
 保存内容包括：
 
@@ -71,14 +71,14 @@ wails3 build
 
 日志文件默认在：
 
-- Windows: `%AppData%\\panplayer\\panplayer.log`
-- `mpv` 日志: `%AppData%\\panplayer\\mpv.log`
+- Windows: `%AppData%\\seven-player\\seven-player.log`
+- `mpv` 日志: `seven-player.sqlite` 同目录下的 `mpv.log`
 
 `mpv` 的续播中间状态默认写在：
 
-- Windows: `%AppData%\\panplayer\\mpv-watch-later`
+- `seven-player.sqlite` 同目录下的 `mpv-watch-later`
 
-这份配置只保存在本机，不会上传到任何服务端。
+这份配置只保存在本机，不会上传到任何服务端。首次启动新版本时，会自动从同目录旧版 `panplayer.sqlite` 复制到 `seven-player.sqlite`。
 
 ## 说明
 

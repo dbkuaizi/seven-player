@@ -10,7 +10,7 @@ import {
   SaveThemeMode,
   SaveUIScalePercent,
   SelectPlayerPath,
-} from '../../bindings/panplayer/app'
+} from '../../bindings/sevenplayer/app'
 import {
   createDefaultSettings,
   normalizeFileListDensity,

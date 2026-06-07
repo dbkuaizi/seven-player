@@ -311,7 +311,7 @@ func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
-	req.Header.Set("User-Agent", "Mozilla/5.0 panplayer115/1.0")
+	req.Header.Set("User-Agent", "Mozilla/5.0 seven-player/1.0")
 	if referer := imageReferer(targetURL.Hostname()); referer != "" {
 		req.Header.Set("Referer", referer)
 	}

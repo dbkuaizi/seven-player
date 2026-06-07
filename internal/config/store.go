@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -11,6 +12,13 @@ import (
 	"sync"
 
 	_ "modernc.org/sqlite"
+)
+
+const (
+	appConfigDirName     = "seven-player"
+	legacyConfigDirName  = "panplayer"
+	sqliteFileName       = "seven-player.sqlite"
+	legacySQLiteFileName = "panplayer.sqlite"
 )
 
 type Credential struct {
@@ -95,12 +103,12 @@ func DefaultState() State {
 func DefaultPath() (string, error) {
 	executablePath, err := os.Executable()
 	if err == nil && strings.TrimSpace(executablePath) != "" {
-		return filepath.Join(filepath.Dir(executablePath), "panplayer.sqlite"), nil
+		return filepath.Join(filepath.Dir(executablePath), sqliteFileName), nil
 	}
 
 	workingDirectory, wdErr := os.Getwd()
 	if wdErr == nil && strings.TrimSpace(workingDirectory) != "" {
-		return filepath.Join(workingDirectory, "panplayer.sqlite"), nil
+		return filepath.Join(workingDirectory, sqliteFileName), nil
 	}
 
 	if err != nil {
@@ -119,6 +127,9 @@ func NewStore(path string) (*Store, error) {
 	}
 
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, err
+	}
+	if err := migrateLegacySQLite(path); err != nil {
 		return nil, err
 	}
 
@@ -255,7 +266,10 @@ func legacyJSONPaths(sqlitePath string) []string {
 	}
 
 	if configDirectory, err := os.UserConfigDir(); err == nil && strings.TrimSpace(configDirectory) != "" {
-		candidates = append(candidates, filepath.Join(configDirectory, "panplayer", "config.json"))
+		candidates = append(candidates,
+			filepath.Join(configDirectory, appConfigDirName, "config.json"),
+			filepath.Join(configDirectory, legacyConfigDirName, "config.json"),
+		)
 	}
 
 	unique := make([]string, 0, len(candidates))
@@ -267,6 +281,58 @@ func legacyJSONPaths(sqlitePath string) []string {
 		unique = append(unique, candidate)
 	}
 	return unique
+}
+
+func migrateLegacySQLite(path string) error {
+	if filepath.Base(path) != sqliteFileName {
+		return nil
+	}
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	legacyPath := filepath.Join(filepath.Dir(path), legacySQLiteFileName)
+	if _, err := os.Stat(legacyPath); errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	if err := copyFileIfExists(legacyPath, path, true); err != nil {
+		return err
+	}
+	if err := copyFileIfExists(legacyPath+"-wal", path+"-wal", false); err != nil {
+		return err
+	}
+	return copyFileIfExists(legacyPath+"-shm", path+"-shm", false)
+}
+
+func copyFileIfExists(sourcePath, targetPath string, exclusive bool) error {
+	source, err := os.Open(sourcePath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer source.Close()
+
+	flags := os.O_CREATE | os.O_WRONLY
+	if exclusive {
+		flags |= os.O_EXCL
+	} else {
+		flags |= os.O_TRUNC
+	}
+	target, err := os.OpenFile(targetPath, flags, 0o644)
+	if err != nil {
+		return err
+	}
+	defer target.Close()
+
+	_, err = io.Copy(target, source)
+	return err
 }
 
 func normalizeSettings(settings Settings) Settings {

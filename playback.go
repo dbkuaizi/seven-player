@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"panplayer/internal/config"
-	"panplayer/internal/pan"
-	"panplayer/internal/player"
+	"sevenplayer/internal/config"
+	"sevenplayer/internal/pan"
+	"sevenplayer/internal/player"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )

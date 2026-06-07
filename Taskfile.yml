@@ -5,7 +5,7 @@ includes:
   windows: ./build/windows/Taskfile.yml
 
 vars:
-  APP_NAME: "panplayer115"
+  APP_NAME: "seven-player"
   BIN_DIR: "bin"
   VITE_PORT: '{{.WAILS_VITE_PORT | default 34115}}'
 

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"panplayer/internal/config"
+	"sevenplayer/internal/config"
 
 	driver "github.com/jianxcao/115driver/pkg/driver"
 )

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strings"
 
-	"panplayer/internal/config"
+	"sevenplayer/internal/config"
 )
 
 func (s *Service) LoginWithCookie(raw string) (*LoginStatusView, error) {

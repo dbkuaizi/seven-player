@@ -4,7 +4,7 @@ import {
   LoginWithCookie,
   Logout,
   StartQRCodeLogin,
-} from '../../bindings/panplayer/app'
+} from '../../bindings/sevenplayer/app'
 
 export function useLoginSession({
   loggedIn,

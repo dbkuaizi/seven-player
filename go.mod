@@ -1,4 +1,4 @@
-module panplayer
+module sevenplayer
 
 go 1.25.0
 

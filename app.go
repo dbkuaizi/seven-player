@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"panplayer/internal/config"
-	"panplayer/internal/pan"
-	"panplayer/internal/player"
-	"panplayer/internal/proxy"
+	"sevenplayer/internal/config"
+	"sevenplayer/internal/pan"
+	"sevenplayer/internal/player"
+	"sevenplayer/internal/proxy"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )

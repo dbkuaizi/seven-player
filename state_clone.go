@@ -1,6 +1,6 @@
 package main
 
-import "panplayer/internal/config"
+import "sevenplayer/internal/config"
 
 func cloneState(state config.State) config.State {
 	cloned := state

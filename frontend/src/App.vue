@@ -24,7 +24,7 @@ import {
   SearchFiles,
   SelectSubtitlePath,
   SelectTorrentFileAsMagnet,
-} from "../bindings/panplayer/app";
+} from "../bindings/sevenplayer/app";
 import { Clipboard } from "@wailsio/runtime";
 import AppSidebar from "./components/app/AppSidebar.vue";
 import NoticeSnackbar from "./components/app/NoticeSnackbar.vue";
@@ -1088,7 +1088,7 @@ async function openBuiltinPlayer(
     builtinPlayer.value = {
       pickCode: item.pickCode,
       rowKey: item.rowKey,
-      title: result?.title || item.displayName || item.name || "PanPlayer 115",
+      title: result?.title || item.displayName || item.name || "Seven Player",
       url: result?.url || "",
       startMs: Number(result?.startMs || 0),
       resumeUsed: Boolean(result?.resumeUsed),
