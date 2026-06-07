@@ -19,9 +19,9 @@ Unicode true
 ####
 ## The following information is taken from the wails_tools.nsh file, but they can be overwritten here.
 ####
-## !define INFO_PROJECTNAME    "panplayer115" # Default "panplayer115"
+## !define INFO_PROJECTNAME    "seven-player" # Default "seven-player"
 ## !define INFO_COMPANYNAME    "OpenAI Codex" # Default "OpenAI Codex"
-## !define INFO_PRODUCTNAME    "PanPlayer 115" # Default "PanPlayer 115"
+## !define INFO_PRODUCTNAME    "Seven Player" # Default "Seven Player"
 ## !define INFO_PRODUCTVERSION "1.0.0"     # Default "0.1.0"
 ## !define INFO_COPYRIGHT      "(c) 2026, OpenAI Codex" # Default "(c) 2026, OpenAI Codex"
 ###

@@ -1,8 +1,8 @@
 package main
 
 import (
-	"panplayer/internal/config"
-	"panplayer/internal/pan"
+	"sevenplayer/internal/config"
+	"sevenplayer/internal/pan"
 )
 
 type AddOfflineRequest struct {

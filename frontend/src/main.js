@@ -5,6 +5,7 @@ import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import App from './App.vue'
 import './main.css'
+import './styles/app.css'
 import 'vuetify/styles'
 import '@mdi/font/css/materialdesignicons.css'
 import 'vidstack/styles/base.css'
@@ -17,6 +18,23 @@ import 'vidstack/define/media-community-skin.js'
 const vuetify = createVuetify({
   components,
   directives,
+  theme: {
+    defaultTheme: 'light',
+    themes: {
+      light: {
+        dark: false,
+        colors: {
+          primary: '#1867c0',
+        },
+      },
+      dark: {
+        dark: true,
+        colors: {
+          primary: '#74a7ff',
+        },
+      },
+    },
+  },
   icons: {
     defaultSet: 'mdi',
     aliases,

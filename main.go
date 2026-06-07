@@ -24,8 +24,8 @@ func main() {
 	}
 
 	app := application.New(application.Options{
-		Name:        "PanPlayer 115",
-		Description: "PanPlayer 115",
+		Name:        "Seven Player",
+		Description: "Seven Player",
 		Logger:      logger,
 		Services: []application.Service{
 			application.NewService(service),
@@ -39,11 +39,11 @@ func main() {
 	})
 
 	service.window = app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:            "PanPlayer 115",
-		Width:            820,
-		Height:           660,
-		MinWidth:         800,
-		MinHeight:        660,
+		Title:            "Seven Player",
+		Width:            defaultWindowWidth,
+		Height:           defaultWindowHeight,
+		MinWidth:         minWindowWidth,
+		MinHeight:        minWindowHeight,
 		DisableResize:    false,
 		Frameless:        false,
 		BackgroundColour: application.NewRGBA(250, 250, 250, 255),
@@ -52,6 +52,7 @@ func main() {
 		URL:              "/",
 	})
 	service.window.OnWindowEvent(events.Common.WindowRuntimeReady, func(_ *application.WindowEvent) {
+		service.applySavedWindowState()
 		service.window.Show()
 	})
 
@@ -66,9 +67,9 @@ func newLogger() *slog.Logger {
 
 	configDir, err := os.UserConfigDir()
 	if err == nil {
-		logDir := filepath.Join(configDir, "panplayer")
+		logDir := filepath.Join(configDir, "seven-player")
 		if mkErr := os.MkdirAll(logDir, 0o755); mkErr == nil {
-			logFilePath := filepath.Join(logDir, "panplayer.log")
+			logFilePath := filepath.Join(logDir, "seven-player.log")
 			logFile, openErr := os.OpenFile(logFilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 			if openErr == nil {
 				writer = io.MultiWriter(os.Stdout, logFile)

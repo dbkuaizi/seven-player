@@ -2,11 +2,8 @@
 
 package player
 
-import (
-	"os/exec"
-	"syscall"
-)
+import "os/exec"
 
 func hideConsoleWindow(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	_ = cmd
 }

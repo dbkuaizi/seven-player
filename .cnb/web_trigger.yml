@@ -1,5 +1,0 @@
-branch:
-  - buttons:
-      - name: Build macOS ARM64
-        description: Build a Wails3 darwin/arm64 package with Docker cross-compilation.
-        event: web_trigger_build_macos_arm64

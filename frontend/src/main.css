@@ -1,5 +1,7 @@
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
+  --app-font-scale: 1;
+  font-size: calc(16px * var(--app-font-scale));
 }
 
 * {

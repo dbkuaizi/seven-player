@@ -42,6 +42,7 @@ type rawFileInfo struct {
 	Name       string              `json:"n"`
 	Type       string              `json:"ico"`
 	Size       driver.StringInt64  `json:"s"`
+	HiddenFlag driver.StringInt    `json:"hdf"`
 	Sha1       string              `json:"sha"`
 	PickCode   string              `json:"pc"`
 	IsStar     driver.StringInt    `json:"m"`
@@ -103,6 +104,7 @@ func fileItemFromRaw(info rawFileInfo) FileItem {
 		PickCode:    file.PickCode,
 		IsDirectory: file.IsDirectory,
 		IsVideo:     isVideo(file.Name, file.IsDirectory),
+		IsHiddenFile: int(info.HiddenFlag) == 1,
 		UpdatedAt:   file.UpdateTime.Format(timeLayoutRFC3339),
 		DurationSec: int64(info.PlayLong),
 	}

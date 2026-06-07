@@ -2,6 +2,7 @@ package pan
 
 import (
 	"strings"
+	"time"
 
 	driver "github.com/jianxcao/115driver/pkg/driver"
 )
@@ -46,21 +47,7 @@ func (s *Service) SearchFiles(keyword string, offset, limit int) (*SearchResultV
 	}
 
 	result := fileSearchResp{}
-	req := client.NewRequest().
-		ForceContentType("application/json;charset=UTF-8").
-		SetQueryParams(map[string]string{
-			"search_value": keyword,
-			"format":       "json",
-			"aid":          "1",
-			"limit":        toDecimalString(limit),
-			"offset":       toDecimalString(offset),
-			"show_dir":     "1",
-			"fc_mix":       "1",
-		}).
-		SetResult(&result)
-
-	resp, err := req.Get(apiFileSearch)
-	if err = driver.CheckErr(err, &result, resp); err != nil {
+	if err := s.searchFilesWithRetry(client, keyword, offset, limit, &result); err != nil {
 		return nil, err
 	}
 
@@ -77,4 +64,45 @@ func (s *Service) SearchFiles(keyword string, offset, limit int) (*SearchResultV
 		HasMore: result.Offset+len(items) < result.Count,
 		Items:   items,
 	}, nil
+}
+
+func (s *Service) searchFilesWithRetry(client *driver.Pan115Client, keyword string, offset, limit int, result *fileSearchResp) error {
+	var lastErr error
+
+	for attempt := 0; attempt < fileAPIRetryCount; attempt++ {
+		err := s.searchFilesOnce(client, keyword, offset, limit, result)
+		if err == nil {
+			return nil
+		}
+
+		lastErr = err
+		if !ShouldRetryTemporaryHTMLResponseError(err) || attempt == fileAPIRetryCount-1 {
+			break
+		}
+		time.Sleep(fileAPIRetryDelay)
+	}
+
+	return normalizeRemoteJSONHTMLError(lastErr, "115 搜索接口暂时返回了异常页面，请稍后重试。")
+}
+
+func (s *Service) searchFilesOnce(client *driver.Pan115Client, keyword string, offset, limit int, result *fileSearchResp) error {
+	req := client.NewRequest().
+		ForceContentType("application/json;charset=UTF-8").
+		SetQueryParams(map[string]string{
+			"search_value": keyword,
+			"format":       "json",
+			"aid":          "1",
+			"limit":        toDecimalString(limit),
+			"offset":       toDecimalString(offset),
+			"show_dir":     "1",
+			"fc_mix":       "1",
+		}).
+		SetResult(result)
+
+	resp, err := req.Get(apiFileSearch)
+	if err = driver.CheckErr(err, result, resp); err != nil {
+		return err
+	}
+
+	return nil
 }

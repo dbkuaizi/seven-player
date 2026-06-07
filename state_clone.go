@@ -1,12 +1,13 @@
 package main
 
-import "panplayer/internal/config"
+import "sevenplayer/internal/config"
 
 func cloneState(state config.State) config.State {
 	cloned := state
 	cloned.Settings = cloneSettings(state.Settings)
 	cloned.Cookies = cloneStringMap(state.Cookies)
 	cloned.PlaybackRecords = clonePlaybackRecords(state.PlaybackRecords)
+	cloned.HiddenModePasswordMD5 = state.HiddenModePasswordMD5
 	if state.Credential != nil {
 		credential := *state.Credential
 		cloned.Credential = &credential
@@ -31,6 +32,16 @@ func cloneStringMap(source map[string]string) map[string]string {
 	for key, value := range source {
 		target[key] = value
 	}
+	return target
+}
+
+func cloneStringSlice(source []string) []string {
+	if len(source) == 0 {
+		return []string{}
+	}
+
+	target := make([]string, len(source))
+	copy(target, source)
 	return target
 }
 

@@ -8,7 +8,7 @@ import (
 
 func TestStoreRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	store, err := NewStore(filepath.Join(dir, "panplayer.sqlite"))
+	store, err := NewStore(filepath.Join(dir, "seven-player.sqlite"))
 	if err != nil {
 		t.Fatalf("NewStore() error = %v", err)
 	}
@@ -44,7 +44,9 @@ func TestStoreRoundTrip(t *testing.T) {
 			"SEID": "s",
 			"KID":  "k",
 		},
-		LastDirectoryID: "123",
+		HiddenModeEnabled:     true,
+		HiddenModePasswordMD5: "abc123md5",
+		LastDirectoryID:       "123",
 		PlaybackRecords: map[string]PlaybackRecord{
 			"pc1": {
 				PickCode:       "pc1",
@@ -54,6 +56,11 @@ func TestStoreRoundTrip(t *testing.T) {
 				LastPlayerID:   "mpv",
 				LastPlayedAt:   "2026-04-25T10:11:12Z",
 			},
+		},
+		Window: WindowState{
+			Width:     1280,
+			Height:    820,
+			Maximised: true,
 		},
 	}
 
@@ -87,12 +94,18 @@ func TestStoreRoundTrip(t *testing.T) {
 	if got.Cookies["UID"] != "u" || got.Cookies["KID"] != "k" {
 		t.Fatalf("cookies mismatch: %+v", got.Cookies)
 	}
+	if !got.HiddenModeEnabled || got.HiddenModePasswordMD5 != "abc123md5" {
+		t.Fatalf("hidden mode state mismatch: enabled=%v md5=%q", got.HiddenModeEnabled, got.HiddenModePasswordMD5)
+	}
 	record, ok := got.PlaybackRecords["pc1"]
 	if !ok {
 		t.Fatalf("playback record missing: %+v", got.PlaybackRecords)
 	}
 	if record.LastPositionMS != 90500 || record.SubtitlePath != "D:/subs/demo.srt" {
 		t.Fatalf("playback record mismatch: %+v", record)
+	}
+	if got.Window.Width != 1280 || got.Window.Height != 820 || !got.Window.Maximised {
+		t.Fatalf("window state mismatch: %+v", got.Window)
 	}
 }
 
@@ -180,7 +193,7 @@ func TestNewStoreMigratesLegacyJSON(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	store, err := NewStore(filepath.Join(dir, "panplayer.sqlite"))
+	store, err := NewStore(filepath.Join(dir, "seven-player.sqlite"))
 	if err != nil {
 		t.Fatalf("NewStore() error = %v", err)
 	}
@@ -195,6 +208,43 @@ func TestNewStoreMigratesLegacyJSON(t *testing.T) {
 		t.Fatalf("LastDirectoryID mismatch: got %q want %q", got.LastDirectoryID, "456")
 	}
 	if got.Cookies["UID"] != "demo" {
+		t.Fatalf("cookies mismatch: %+v", got.Cookies)
+	}
+}
+
+func TestNewStoreMigratesLegacySQLite(t *testing.T) {
+	dir := t.TempDir()
+	legacyStore, err := NewStore(filepath.Join(dir, "panplayer.sqlite"))
+	if err != nil {
+		t.Fatalf("NewStore(legacy) error = %v", err)
+	}
+	if err := legacyStore.Save(State{
+		LastDirectoryID: "789",
+		Cookies: map[string]string{
+			"UID": "legacy",
+		},
+	}); err != nil {
+		t.Fatalf("Save(legacy) error = %v", err)
+	}
+	if err := legacyStore.Close(); err != nil {
+		t.Fatalf("Close(legacy) error = %v", err)
+	}
+
+	store, err := NewStore(filepath.Join(dir, "seven-player.sqlite"))
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+	defer store.Close()
+
+	got, err := store.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if got.LastDirectoryID != "789" {
+		t.Fatalf("LastDirectoryID mismatch: got %q want %q", got.LastDirectoryID, "789")
+	}
+	if got.Cookies["UID"] != "legacy" {
 		t.Fatalf("cookies mismatch: %+v", got.Cookies)
 	}
 }

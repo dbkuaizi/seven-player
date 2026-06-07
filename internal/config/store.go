@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -11,6 +12,13 @@ import (
 	"sync"
 
 	_ "modernc.org/sqlite"
+)
+
+const (
+	appConfigDirName     = "seven-player"
+	legacyConfigDirName  = "panplayer"
+	sqliteFileName       = "seven-player.sqlite"
+	legacySQLiteFileName = "panplayer.sqlite"
 )
 
 type Credential struct {
@@ -31,15 +39,18 @@ type DirectoryTarget struct {
 }
 
 type Settings struct {
-	PreferredPlayer      string            `json:"preferredPlayer,omitempty"`
-	PlayerPaths          map[string]string `json:"playerPaths,omitempty"`
-	DisabledPlayers      map[string]bool   `json:"disabledPlayers,omitempty"`
-	MPVPath              string            `json:"mpvPath,omitempty"`
-	HideTitleBadges      bool              `json:"hideTitleBadges,omitempty"`
-	HideSmallFiles       bool              `json:"hideSmallFiles,omitempty"`
-	SmallFileFilterMB    int               `json:"smallFileFilterMB,omitempty"`
-	FileListDensity      string            `json:"fileListDensity,omitempty"`
-	OfflineRecentTargets []DirectoryTarget `json:"offlineRecentTargets,omitempty"`
+	PreferredPlayer          string            `json:"preferredPlayer,omitempty"`
+	PlayerPaths              map[string]string `json:"playerPaths,omitempty"`
+	DisabledPlayers          map[string]bool   `json:"disabledPlayers,omitempty"`
+	MPVPath                  string            `json:"mpvPath,omitempty"`
+	HideTitleBadges          bool              `json:"hideTitleBadges,omitempty"`
+	DisableCleanTitleDisplay bool              `json:"disableCleanTitleDisplay,omitempty"`
+	UIScalePercent           int               `json:"uiScalePercent,omitempty"`
+	ThemeMode                string            `json:"themeMode,omitempty"`
+	HideSmallFiles           bool              `json:"hideSmallFiles,omitempty"`
+	SmallFileFilterMB        int               `json:"smallFileFilterMB,omitempty"`
+	FileListDensity          string            `json:"fileListDensity,omitempty"`
+	OfflineRecentTargets     []DirectoryTarget `json:"offlineRecentTargets,omitempty"`
 }
 
 type PlaybackRecord struct {
@@ -51,12 +62,21 @@ type PlaybackRecord struct {
 	LastPlayedAt   string `json:"lastPlayedAt,omitempty"`
 }
 
+type WindowState struct {
+	Width     int  `json:"width,omitempty"`
+	Height    int  `json:"height,omitempty"`
+	Maximised bool `json:"maximised,omitempty"`
+}
+
 type State struct {
-	Settings        Settings                  `json:"settings"`
-	Credential      *Credential               `json:"credential,omitempty"`
-	Cookies         map[string]string         `json:"cookies,omitempty"`
-	LastDirectoryID string                    `json:"lastDirectoryId"`
-	PlaybackRecords map[string]PlaybackRecord `json:"playbackRecords,omitempty"`
+	Settings              Settings                  `json:"settings"`
+	Credential            *Credential               `json:"credential,omitempty"`
+	Cookies               map[string]string         `json:"cookies,omitempty"`
+	HiddenModeEnabled     bool                      `json:"hiddenModeEnabled,omitempty"`
+	HiddenModePasswordMD5 string                    `json:"hiddenModePasswordMd5,omitempty"`
+	LastDirectoryID       string                    `json:"lastDirectoryId"`
+	PlaybackRecords       map[string]PlaybackRecord `json:"playbackRecords,omitempty"`
+	Window                WindowState               `json:"window,omitempty"`
 }
 
 type Store struct {
@@ -71,6 +91,8 @@ func DefaultState() State {
 			PreferredPlayer:      "mpv",
 			PlayerPaths:          map[string]string{},
 			DisabledPlayers:      map[string]bool{},
+			UIScalePercent:       100,
+			ThemeMode:            "system",
 			FileListDensity:      "default",
 			OfflineRecentTargets: []DirectoryTarget{},
 		},
@@ -81,12 +103,12 @@ func DefaultState() State {
 func DefaultPath() (string, error) {
 	executablePath, err := os.Executable()
 	if err == nil && strings.TrimSpace(executablePath) != "" {
-		return filepath.Join(filepath.Dir(executablePath), "panplayer.sqlite"), nil
+		return filepath.Join(filepath.Dir(executablePath), sqliteFileName), nil
 	}
 
 	workingDirectory, wdErr := os.Getwd()
 	if wdErr == nil && strings.TrimSpace(workingDirectory) != "" {
-		return filepath.Join(workingDirectory, "panplayer.sqlite"), nil
+		return filepath.Join(workingDirectory, sqliteFileName), nil
 	}
 
 	if err != nil {
@@ -105,6 +127,9 @@ func NewStore(path string) (*Store, error) {
 	}
 
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, err
+	}
+	if err := migrateLegacySQLite(path); err != nil {
 		return nil, err
 	}
 
@@ -134,6 +159,10 @@ func NewStore(path string) (*Store, error) {
 
 func (s *Store) Path() string {
 	return s.path
+}
+
+func (s *Store) DB() *sql.DB {
+	return s.db
 }
 
 func (s *Store) Close() error {
@@ -237,7 +266,10 @@ func legacyJSONPaths(sqlitePath string) []string {
 	}
 
 	if configDirectory, err := os.UserConfigDir(); err == nil && strings.TrimSpace(configDirectory) != "" {
-		candidates = append(candidates, filepath.Join(configDirectory, "panplayer", "config.json"))
+		candidates = append(candidates,
+			filepath.Join(configDirectory, appConfigDirName, "config.json"),
+			filepath.Join(configDirectory, legacyConfigDirName, "config.json"),
+		)
 	}
 
 	unique := make([]string, 0, len(candidates))
@@ -249,6 +281,58 @@ func legacyJSONPaths(sqlitePath string) []string {
 		unique = append(unique, candidate)
 	}
 	return unique
+}
+
+func migrateLegacySQLite(path string) error {
+	if filepath.Base(path) != sqliteFileName {
+		return nil
+	}
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	legacyPath := filepath.Join(filepath.Dir(path), legacySQLiteFileName)
+	if _, err := os.Stat(legacyPath); errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	if err := copyFileIfExists(legacyPath, path, true); err != nil {
+		return err
+	}
+	if err := copyFileIfExists(legacyPath+"-wal", path+"-wal", false); err != nil {
+		return err
+	}
+	return copyFileIfExists(legacyPath+"-shm", path+"-shm", false)
+}
+
+func copyFileIfExists(sourcePath, targetPath string, exclusive bool) error {
+	source, err := os.Open(sourcePath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer source.Close()
+
+	flags := os.O_CREATE | os.O_WRONLY
+	if exclusive {
+		flags |= os.O_EXCL
+	} else {
+		flags |= os.O_TRUNC
+	}
+	target, err := os.OpenFile(targetPath, flags, 0o644)
+	if err != nil {
+		return err
+	}
+	defer target.Close()
+
+	_, err = io.Copy(target, source)
+	return err
 }
 
 func normalizeSettings(settings Settings) Settings {
@@ -273,14 +357,24 @@ func normalizeSettings(settings Settings) Settings {
 	}
 	settings.SmallFileFilterMB = normalizeSmallFileFilterMB(settings.SmallFileFilterMB)
 	settings.FileListDensity = normalizeFileListDensity(settings.FileListDensity)
+	settings.UIScalePercent = normalizeUIScalePercent(settings.UIScalePercent)
+	settings.ThemeMode = normalizeThemeMode(settings.ThemeMode)
 	settings.OfflineRecentTargets = NormalizeOfflineRecentTargets(settings.OfflineRecentTargets)
 	settings.HideSmallFiles = false
 	return settings
 }
 
 func NormalizeOfflineRecentTargets(targets []DirectoryTarget) []DirectoryTarget {
+	return NormalizeDirectoryTargets(targets, 3)
+}
+
+func NormalizeDirectoryTargets(targets []DirectoryTarget, limit int) []DirectoryTarget {
+	if limit <= 0 {
+		return []DirectoryTarget{}
+	}
+
 	normalized := make([]DirectoryTarget, 0, 3)
-	seen := make(map[string]struct{}, 3)
+	seen := make(map[string]struct{}, limit)
 
 	for _, target := range targets {
 		current, ok := NormalizeDirectoryTarget(target)
@@ -292,7 +386,7 @@ func NormalizeOfflineRecentTargets(targets []DirectoryTarget) []DirectoryTarget 
 		}
 		seen[current.ID] = struct{}{}
 		normalized = append(normalized, current)
-		if len(normalized) == 3 {
+		if len(normalized) == limit {
 			break
 		}
 	}
@@ -394,10 +488,51 @@ func normalizeFileListDensity(value string) string {
 	}
 }
 
+func normalizeUIScalePercent(value int) int {
+	if value < 100 {
+		return 100
+	}
+	if value > 150 {
+		return 150
+	}
+	return ((value + 2) / 5) * 5
+}
+
+func normalizeThemeMode(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "light", "dark":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return "system"
+	}
+}
+
 func normalizeState(state State) State {
 	state.Settings = normalizeSettings(state.Settings)
+	if state.Credential != nil {
+		state.Credential.UID = strings.TrimSpace(state.Credential.UID)
+		state.Credential.CID = strings.TrimSpace(state.Credential.CID)
+		state.Credential.SEID = strings.TrimSpace(state.Credential.SEID)
+		state.Credential.KID = strings.TrimSpace(state.Credential.KID)
+		if state.Credential.UID == "" &&
+			state.Credential.CID == "" &&
+			state.Credential.SEID == "" &&
+			state.Credential.KID == "" {
+			state.Credential = nil
+		}
+	}
+	if state.Cookies == nil {
+		state.Cookies = map[string]string{}
+	}
+	state.HiddenModePasswordMD5 = strings.TrimSpace(state.HiddenModePasswordMD5)
 	if state.PlaybackRecords == nil {
 		state.PlaybackRecords = map[string]PlaybackRecord{}
+	}
+	if state.Window.Width < 0 {
+		state.Window.Width = 0
+	}
+	if state.Window.Height < 0 {
+		state.Window.Height = 0
 	}
 	return state
 }

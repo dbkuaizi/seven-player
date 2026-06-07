@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"panplayer/internal/config"
-	"panplayer/internal/pan"
-	"panplayer/internal/player"
+	"sevenplayer/internal/config"
+	"sevenplayer/internal/pan"
+	"sevenplayer/internal/player"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -21,6 +21,7 @@ type PlayRequest struct {
 	StartMS   int64  `json:"startMs"`
 	FromStart bool   `json:"fromStart"`
 	Subtitle  string `json:"subtitle,omitempty"`
+	PlayerID  string `json:"playerId,omitempty"`
 }
 
 type PlayResult struct {
@@ -191,6 +192,7 @@ func (a *App) normalizePlayRequest(req PlayRequest) (PlayRequest, config.Playbac
 	req.PickCode = strings.TrimSpace(req.PickCode)
 	req.Name = strings.TrimSpace(req.Name)
 	req.Subtitle = strings.TrimSpace(req.Subtitle)
+	req.PlayerID = strings.ToLower(strings.TrimSpace(req.PlayerID))
 
 	record, _ := a.playbackRecord(req.PickCode)
 	if req.FromStart {
@@ -340,4 +342,35 @@ func chooseName(existing, fallback string) string {
 		return strings.TrimSpace(fallback)
 	}
 	return strings.TrimSpace(existing)
+}
+
+func playOnceWithPlayer(settings config.Settings, playerID string) (config.Settings, error) {
+	playerID = strings.ToLower(strings.TrimSpace(playerID))
+	if playerID == "" {
+		return settings, nil
+	}
+	if !player.IsKnown(playerID) {
+		return settings, errors.New("不支持的播放器")
+	}
+	if settings.DisabledPlayers[playerID] {
+		return settings, errors.New(player.NameOf(playerID) + " 已禁用")
+	}
+
+	disabledPlayers := make(map[string]bool, len(settings.DisabledPlayers)+5)
+	for id, disabled := range settings.DisabledPlayers {
+		disabledPlayers[id] = disabled
+	}
+	for _, id := range []string{
+		player.PlayerMPV,
+		player.PlayerVLC,
+		player.PlayerPotPlayer,
+		player.PlayerMPCHC,
+		player.PlayerMPCBE,
+	} {
+		disabledPlayers[id] = id != playerID
+	}
+
+	settings.PreferredPlayer = playerID
+	settings.DisabledPlayers = disabledPlayers
+	return settings, nil
 }

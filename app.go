@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"panplayer/internal/config"
-	"panplayer/internal/pan"
-	"panplayer/internal/player"
-	"panplayer/internal/proxy"
+	"sevenplayer/internal/config"
+	"sevenplayer/internal/pan"
+	"sevenplayer/internal/player"
+	"sevenplayer/internal/proxy"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -32,12 +32,14 @@ type App struct {
 }
 
 type BootstrapResult struct {
-	LoggedIn  bool          `json:"loggedIn"`
-	User      *pan.UserView `json:"user,omitempty"`
-	Settings  SettingsView  `json:"settings"`
-	CurrentID string        `json:"currentId"`
-	ProxyBase string        `json:"proxyBase"`
-	Version   string        `json:"version"`
+	LoggedIn                     bool                     `json:"loggedIn"`
+	User                         *pan.UserView            `json:"user,omitempty"`
+	HiddenMode                   pan.HiddenModeStatusView `json:"hiddenMode"`
+	HiddenModePasswordRemembered bool                     `json:"hiddenModePasswordRemembered"`
+	Settings                     SettingsView             `json:"settings"`
+	CurrentID                    string                   `json:"currentId"`
+	ProxyBase                    string                   `json:"proxyBase"`
+	Version                      string                   `json:"version"`
 }
 
 type SettingsView struct {
@@ -45,6 +47,9 @@ type SettingsView struct {
 	Players              []player.Status       `json:"players"`
 	ConfigPath           string                `json:"configPath"`
 	ShowTitleBadges      bool                  `json:"showTitleBadges"`
+	CleanTitleDisplay    bool                  `json:"cleanTitleDisplay"`
+	UIScalePercent       int                   `json:"uiScalePercent"`
+	ThemeMode            string                `json:"themeMode"`
 	SmallFileFilterMB    int                   `json:"smallFileFilterMB"`
 	FileListDensity      string                `json:"fileListDensity"`
 	OfflineRecentTargets []DirectoryTargetView `json:"offlineRecentTargets"`
@@ -54,6 +59,13 @@ type DirectoryTargetView struct {
 	ID   string           `json:"id"`
 	Path []pan.Breadcrumb `json:"path"`
 }
+
+const (
+	defaultWindowWidth  = 820
+	defaultWindowHeight = 660
+	minWindowWidth      = 800
+	minWindowHeight     = 660
+)
 
 func NewApp(logger *slog.Logger) (*App, error) {
 	store, err := config.NewStore("")
@@ -104,6 +116,10 @@ func (a *App) startup(ctx context.Context) {
 		if !ok {
 			a.clearCredential()
 		} else {
+			a.mu.RLock()
+			restoreHiddenMode := a.state.HiddenModeEnabled
+			a.mu.RUnlock()
+			a.pan.RestoreHiddenMode(restoreHiddenMode)
 			a.syncSessionState()
 			a.logger.Info("login restored", "user", user.UserName)
 		}
@@ -115,6 +131,8 @@ func (a *App) startup(ctx context.Context) {
 func (a *App) shutdown(ctx context.Context) {
 	shutdownCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
+
+	a.persistWindowState()
 
 	if err := a.proxy.Close(shutdownCtx); err != nil {
 		a.logger.Warn("failed to stop proxy", "error", err)
@@ -131,12 +149,14 @@ func (a *App) Bootstrap() (*BootstrapResult, error) {
 
 	user, loggedIn := a.pan.CurrentUser()
 	return &BootstrapResult{
-		LoggedIn:  loggedIn,
-		User:      user,
-		Settings:  a.settingsView(),
-		CurrentID: a.currentDirectoryID(),
-		ProxyBase: a.proxy.BaseURL(),
-		Version:   "v1",
+		LoggedIn:                     loggedIn,
+		User:                         user,
+		HiddenMode:                   a.pan.HiddenModeStatus(),
+		HiddenModePasswordRemembered: a.hiddenModePasswordRemembered(),
+		Settings:                     a.settingsView(),
+		CurrentID:                    a.currentDirectoryID(),
+		ProxyBase:                    a.proxy.BaseURL(),
+		Version:                      "v1",
 	}, nil
 }
 
@@ -176,6 +196,7 @@ func (a *App) Logout() error {
 	a.mu.Lock()
 	a.state.Credential = nil
 	a.state.Cookies = nil
+	a.state.HiddenModeEnabled = false
 	previousSettings := cloneSettings(a.state.Settings)
 	a.state = config.DefaultState()
 	a.state.Settings = previousSettings
@@ -183,6 +204,41 @@ func (a *App) Logout() error {
 	a.mu.Unlock()
 
 	return a.store.Save(state)
+}
+
+func (a *App) SetHiddenMode(enabled bool, password string, rememberPassword bool) (*pan.HiddenModeStatusView, error) {
+	if !a.started {
+		return nil, errors.New("app not ready")
+	}
+
+	password = strings.TrimSpace(password)
+	passwordMD5 := ""
+	if enabled && password == "" {
+		passwordMD5 = a.currentHiddenModePasswordMD5()
+	}
+
+	status, err := a.pan.SetHiddenMode(enabled, password, passwordMD5)
+	if err != nil {
+		return nil, err
+	}
+
+	a.mu.Lock()
+	if enabled && rememberPassword {
+		if password != "" {
+			a.state.HiddenModePasswordMD5 = pan.MD5HexForClient(password)
+		}
+	} else if !enabled || !rememberPassword {
+		a.state.HiddenModePasswordMD5 = ""
+	}
+	state := cloneState(a.state)
+	a.mu.Unlock()
+
+	if err := a.store.Save(state); err != nil {
+		return nil, err
+	}
+
+	a.syncSessionState()
+	return status, nil
 }
 
 func (a *App) ListDirectory(dirID string, offset int, limit int) (*pan.DirectoryView, error) {
@@ -234,6 +290,11 @@ func (a *App) PlayFile(req PlayRequest) (*PlayResult, error) {
 	subtitlePath := a.prepareSubtitlePath(req.PickCode, a.selectedSubtitlePath(req.PickCode, req.Subtitle))
 	streamURL := a.proxy.StreamURL(req.PickCode, req.Name)
 	settings := a.currentSettings()
+	var err error
+	settings, err = playOnceWithPlayer(settings, req.PlayerID)
+	if err != nil {
+		return nil, err
+	}
 	logDir := filepath.Dir(a.store.Path())
 
 	if err := a.proxy.Probe(req.PickCode, req.Name); err != nil {
@@ -458,6 +519,51 @@ func (a *App) SaveShowTitleBadgesEnabled(enabled bool) (*SettingsView, error) {
 	return &view, nil
 }
 
+func (a *App) SaveCleanTitleDisplayEnabled(enabled bool) (*SettingsView, error) {
+	a.mu.Lock()
+	a.state.Settings = normalizeAppSettings(a.state.Settings)
+	a.state.Settings.DisableCleanTitleDisplay = !enabled
+	state := cloneState(a.state)
+	a.mu.Unlock()
+
+	if err := a.store.Save(state); err != nil {
+		return nil, err
+	}
+
+	view := a.settingsView()
+	return &view, nil
+}
+
+func (a *App) SaveUIScalePercent(value int) (*SettingsView, error) {
+	a.mu.Lock()
+	a.state.Settings = normalizeAppSettings(a.state.Settings)
+	a.state.Settings.UIScalePercent = normalizeUIScalePercent(value)
+	state := cloneState(a.state)
+	a.mu.Unlock()
+
+	if err := a.store.Save(state); err != nil {
+		return nil, err
+	}
+
+	view := a.settingsView()
+	return &view, nil
+}
+
+func (a *App) SaveThemeMode(value string) (*SettingsView, error) {
+	a.mu.Lock()
+	a.state.Settings = normalizeAppSettings(a.state.Settings)
+	a.state.Settings.ThemeMode = normalizeThemeMode(value)
+	state := cloneState(a.state)
+	a.mu.Unlock()
+
+	if err := a.store.Save(state); err != nil {
+		return nil, err
+	}
+
+	view := a.settingsView()
+	return &view, nil
+}
+
 func (a *App) SaveSmallFileFilterMB(value int) (*SettingsView, error) {
 	a.mu.Lock()
 	a.state.Settings = normalizeAppSettings(a.state.Settings)
@@ -516,6 +622,8 @@ func (a *App) clearCredential() {
 	a.mu.Lock()
 	a.state.Credential = nil
 	a.state.Cookies = nil
+	a.state.HiddenModeEnabled = false
+	a.state.HiddenModePasswordMD5 = ""
 	state := cloneState(a.state)
 	a.mu.Unlock()
 
@@ -574,6 +682,9 @@ func (a *App) settingsView() SettingsView {
 		}),
 		ConfigPath:           a.store.Path(),
 		ShowTitleBadges:      !settings.HideTitleBadges,
+		CleanTitleDisplay:    !settings.DisableCleanTitleDisplay,
+		UIScalePercent:       settings.UIScalePercent,
+		ThemeMode:            settings.ThemeMode,
 		SmallFileFilterMB:    settings.SmallFileFilterMB,
 		FileListDensity:      settings.FileListDensity,
 		OfflineRecentTargets: buildDirectoryTargetViews(settings.OfflineRecentTargets),
@@ -596,12 +707,23 @@ func (a *App) syncSessionState() {
 	a.mu.Lock()
 	a.state.Credential = credential
 	a.state.Cookies = cookies
+	a.state.HiddenModeEnabled = a.pan.HiddenModeStatus().Enabled
 	state := cloneState(a.state)
 	a.mu.Unlock()
 
 	if err := a.store.Save(state); err != nil {
 		a.logger.Warn("failed to persist session state", "error", err)
 	}
+}
+
+func (a *App) currentHiddenModePasswordMD5() string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return strings.TrimSpace(a.state.HiddenModePasswordMD5)
+}
+
+func (a *App) hiddenModePasswordRemembered() bool {
+	return a.currentHiddenModePasswordMD5() != ""
 }
 
 func (a *App) persistLoggedInState() {
@@ -612,6 +734,57 @@ func (a *App) persistLoggedInState() {
 	a.mu.Unlock()
 
 	a.syncSessionState()
+}
+
+func (a *App) applySavedWindowState() {
+	if a.window == nil {
+		return
+	}
+
+	a.mu.RLock()
+	saved := a.state.Window
+	a.mu.RUnlock()
+
+	width := saved.Width
+	height := saved.Height
+	if width < minWindowWidth {
+		width = defaultWindowWidth
+	}
+	if height < minWindowHeight {
+		height = defaultWindowHeight
+	}
+
+	a.window.SetSize(width, height)
+	a.window.SetMinSize(minWindowWidth, minWindowHeight)
+	if saved.Maximised {
+		a.window.Maximise()
+	}
+}
+
+func (a *App) persistWindowState() {
+	if a.window == nil {
+		return
+	}
+
+	a.mu.Lock()
+	windowState := a.state.Window
+	windowState.Maximised = a.window.IsMaximised()
+	if !windowState.Maximised {
+		width, height := a.window.Size()
+		if width >= minWindowWidth {
+			windowState.Width = width
+		}
+		if height >= minWindowHeight {
+			windowState.Height = height
+		}
+	}
+	a.state.Window = windowState
+	state := cloneState(a.state)
+	a.mu.Unlock()
+
+	if err := a.store.Save(state); err != nil {
+		a.logger.Warn("failed to persist window state", "error", err)
+	}
 }
 
 func normalizeAppSettings(settings config.Settings) config.Settings {
@@ -636,6 +809,8 @@ func normalizeAppSettings(settings config.Settings) config.Settings {
 	}
 	settings.SmallFileFilterMB = normalizeSmallFileFilterMB(settings.SmallFileFilterMB)
 	settings.FileListDensity = normalizeFileListDensity(settings.FileListDensity)
+	settings.UIScalePercent = normalizeUIScalePercent(settings.UIScalePercent)
+	settings.ThemeMode = normalizeThemeMode(settings.ThemeMode)
 	settings.OfflineRecentTargets = config.NormalizeOfflineRecentTargets(settings.OfflineRecentTargets)
 	settings.HideSmallFiles = false
 	if settings.DisabledPlayers[settings.PreferredPlayer] {
@@ -708,6 +883,28 @@ func buildDirectoryTargetViews(targets []config.DirectoryTarget) []DirectoryTarg
 	return result
 }
 
+func directoryTargetViewsToConfig(targets []DirectoryTargetView) []config.DirectoryTarget {
+	if len(targets) == 0 {
+		return []config.DirectoryTarget{}
+	}
+
+	result := make([]config.DirectoryTarget, 0, len(targets))
+	for _, target := range targets {
+		path := make([]config.Breadcrumb, 0, len(target.Path))
+		for _, crumb := range target.Path {
+			path = append(path, config.Breadcrumb{
+				ID:   crumb.ID,
+				Name: crumb.Name,
+			})
+		}
+		result = append(result, config.DirectoryTarget{
+			ID:   target.ID,
+			Path: path,
+		})
+	}
+	return result
+}
+
 func normalizeSmallFileFilterMB(value int) int {
 	switch value {
 	case 0, 1, 2, 3, 5, 10:
@@ -725,5 +922,24 @@ func normalizeFileListDensity(value string) string {
 		return "comfortable"
 	default:
 		return "default"
+	}
+}
+
+func normalizeUIScalePercent(value int) int {
+	if value < 100 {
+		return 100
+	}
+	if value > 150 {
+		return 150
+	}
+	return ((value + 2) / 5) * 5
+}
+
+func normalizeThemeMode(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "light", "dark":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return "system"
 	}
 }

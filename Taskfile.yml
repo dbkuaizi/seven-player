@@ -3,11 +3,9 @@ version: '3'
 includes:
   common: ./build/Taskfile.yml
   windows: ./build/windows/Taskfile.yml
-  darwin: ./build/darwin/Taskfile.yml
-  linux: ./build/linux/Taskfile.yml
 
 vars:
-  APP_NAME: "panplayer115"
+  APP_NAME: "seven-player"
   BIN_DIR: "bin"
   VITE_PORT: '{{.WAILS_VITE_PORT | default 34115}}'
 
@@ -15,24 +13,19 @@ tasks:
   build:
     summary: Builds the application
     cmds:
-      - task: "{{OS}}:build"
+      - task: windows:build
 
   package:
     summary: Packages a production build of the application
     cmds:
-      - task: "{{OS}}:package"
+      - task: windows:package
 
   run:
     summary: Runs the application
     cmds:
-      - task: "{{OS}}:run"
+      - task: windows:run
 
   dev:
     summary: Runs the application in development mode
     cmds:
       - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
-
-  setup:docker:
-    summary: Builds Docker image for cross-compilation (~800MB download)
-    cmds:
-      - task: common:setup:docker
