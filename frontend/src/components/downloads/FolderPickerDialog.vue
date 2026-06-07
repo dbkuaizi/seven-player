@@ -47,8 +47,12 @@ function close() {
                 <button
                   type="button"
                   class="file-breadcrumb-link"
-                  :class="{ 'file-breadcrumb-link--disabled': item.disabled }"
+                  :class="{
+                    'file-breadcrumb-link--disabled': item.disabled,
+                    'file-breadcrumb-link--last': item.isLast,
+                  }"
                   :disabled="item.disabled"
+                  :title="item.rawTitle || item.title"
                   @click="emit('open-breadcrumb', item.id)"
                 >
                   {{ item.title }}

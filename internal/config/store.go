@@ -15,10 +15,11 @@ import (
 )
 
 const (
-	appConfigDirName     = "seven-player"
-	legacyConfigDirName  = "panplayer"
-	sqliteFileName       = "seven-player.sqlite"
-	legacySQLiteFileName = "panplayer.sqlite"
+	appConfigDirName        = "seven-player"
+	legacyConfigDirName     = "panplayer"
+	sqliteFileName          = "data.db"
+	legacySevenSQLiteName   = "seven-player.sqlite"
+	legacyPanSQLiteFileName = "panplayer.sqlite"
 )
 
 type Credential struct {
@@ -47,6 +48,7 @@ type Settings struct {
 	DisableCleanTitleDisplay bool              `json:"disableCleanTitleDisplay,omitempty"`
 	UIScalePercent           int               `json:"uiScalePercent,omitempty"`
 	ThemeMode                string            `json:"themeMode,omitempty"`
+	ThemeColor               string            `json:"themeColor,omitempty"`
 	HideSmallFiles           bool              `json:"hideSmallFiles,omitempty"`
 	SmallFileFilterMB        int               `json:"smallFileFilterMB,omitempty"`
 	FileListDensity          string            `json:"fileListDensity,omitempty"`
@@ -93,6 +95,7 @@ func DefaultState() State {
 			DisabledPlayers:      map[string]bool{},
 			UIScalePercent:       100,
 			ThemeMode:            "system",
+			ThemeColor:           "blue",
 			FileListDensity:      "default",
 			OfflineRecentTargets: []DirectoryTarget{},
 		},
@@ -132,6 +135,12 @@ func NewStore(path string) (*Store, error) {
 	if err := migrateLegacySQLite(path); err != nil {
 		return nil, err
 	}
+	if err := prepareSQLiteSingleFile(path); err != nil {
+		return nil, err
+	}
+	if err := cleanupLegacySQLiteFiles(path); err != nil {
+		return nil, err
+	}
 
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -169,7 +178,11 @@ func (s *Store) Close() error {
 	if s == nil || s.db == nil {
 		return nil
 	}
-	return s.db.Close()
+	err := s.db.Close()
+	if cleanupErr := cleanupSQLiteSidecars(s.path); err == nil {
+		err = cleanupErr
+	}
+	return err
 }
 
 func (s *Store) Load() (State, error) {
@@ -203,7 +216,8 @@ func (s *Store) Save(state State) error {
 
 func (s *Store) initSchema() error {
 	_, err := s.db.Exec(`
-		PRAGMA journal_mode = WAL;
+		PRAGMA journal_mode = MEMORY;
+		PRAGMA temp_store = MEMORY;
 		CREATE TABLE IF NOT EXISTS app_state (
 			id INTEGER PRIMARY KEY CHECK (id = 1),
 			data TEXT NOT NULL,
@@ -293,20 +307,68 @@ func migrateLegacySQLite(path string) error {
 		return err
 	}
 
-	legacyPath := filepath.Join(filepath.Dir(path), legacySQLiteFileName)
-	if _, err := os.Stat(legacyPath); errors.Is(err, os.ErrNotExist) {
+	for _, legacyName := range []string{legacySevenSQLiteName, legacyPanSQLiteFileName} {
+		legacyPath := filepath.Join(filepath.Dir(path), legacyName)
+		if _, err := os.Stat(legacyPath); errors.Is(err, os.ErrNotExist) {
+			continue
+		} else if err != nil {
+			return err
+		}
+
+		if err := checkpointSQLiteToMainFile(legacyPath); err != nil {
+			return err
+		}
+		if err := copyFileIfExists(legacyPath, path, true); err != nil {
+			return err
+		}
+		_ = removeSQLiteFiles(legacyPath)
+		return cleanupSQLiteSidecars(path)
+	}
+	return nil
+}
+
+func prepareSQLiteSingleFile(path string) error {
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		return nil
 	} else if err != nil {
 		return err
 	}
+	return checkpointSQLiteToMainFile(path)
+}
 
-	if err := copyFileIfExists(legacyPath, path, true); err != nil {
+func cleanupLegacySQLiteFiles(path string) error {
+	if filepath.Base(path) != sqliteFileName {
+		return nil
+	}
+
+	var errs []error
+	for _, legacyName := range []string{legacySevenSQLiteName, legacyPanSQLiteFileName} {
+		if err := removeSQLiteFiles(filepath.Join(filepath.Dir(path), legacyName)); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func checkpointSQLiteToMainFile(path string) error {
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
 		return err
 	}
-	if err := copyFileIfExists(legacyPath+"-wal", path+"-wal", false); err != nil {
+	db.SetMaxOpenConns(1)
+
+	if _, err := db.Exec(`PRAGMA wal_checkpoint(TRUNCATE);`); err != nil {
+		_ = db.Close()
 		return err
 	}
-	return copyFileIfExists(legacyPath+"-shm", path+"-shm", false)
+	if _, err := db.Exec(`PRAGMA journal_mode = MEMORY;`); err != nil {
+		_ = db.Close()
+		return err
+	}
+	if err := db.Close(); err != nil {
+		return err
+	}
+	return cleanupSQLiteSidecars(path)
 }
 
 func copyFileIfExists(sourcePath, targetPath string, exclusive bool) error {
@@ -335,6 +397,23 @@ func copyFileIfExists(sourcePath, targetPath string, exclusive bool) error {
 	return err
 }
 
+func cleanupSQLiteSidecars(path string) error {
+	var errs []error
+	for _, suffix := range []string{"-wal", "-shm", "-journal"} {
+		if err := os.Remove(path + suffix); err != nil && !errors.Is(err, os.ErrNotExist) {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func removeSQLiteFiles(path string) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return cleanupSQLiteSidecars(path)
+}
+
 func normalizeSettings(settings Settings) Settings {
 	if settings.PlayerPaths == nil {
 		settings.PlayerPaths = map[string]string{}
@@ -359,6 +438,7 @@ func normalizeSettings(settings Settings) Settings {
 	settings.FileListDensity = normalizeFileListDensity(settings.FileListDensity)
 	settings.UIScalePercent = normalizeUIScalePercent(settings.UIScalePercent)
 	settings.ThemeMode = normalizeThemeMode(settings.ThemeMode)
+	settings.ThemeColor = normalizeThemeColor(settings.ThemeColor)
 	settings.OfflineRecentTargets = NormalizeOfflineRecentTargets(settings.OfflineRecentTargets)
 	settings.HideSmallFiles = false
 	return settings
@@ -504,6 +584,15 @@ func normalizeThemeMode(value string) string {
 		return strings.ToLower(strings.TrimSpace(value))
 	default:
 		return "system"
+	}
+}
+
+func normalizeThemeColor(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "blue", "teal", "sky", "royal", "cyan", "emerald", "green", "lime", "yellow", "amber", "orange", "red", "rose", "pink", "fuchsia", "purple", "violet", "indigo", "gray", "slate":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return "blue"
 	}
 }
 

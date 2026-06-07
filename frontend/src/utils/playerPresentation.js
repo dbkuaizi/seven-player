@@ -5,16 +5,12 @@ export function capabilityTags(player) {
 
   return [
     {
-      label: player.supportsStartPosition ? '支持跳转播放' : '不支持跳转播放',
+      label: player.supportsStartPosition ? '跳转' : '不支持跳转',
       color: player.supportsStartPosition ? 'primary' : 'warning',
     },
     {
-      label: player.supportsSubtitle ? '支持外挂字幕' : '不支持外挂字幕',
+      label: player.supportsSubtitle ? '字幕' : '不支持字幕',
       color: player.supportsSubtitle ? 'primary' : 'warning',
-    },
-    {
-      label: player.supportsManagedResume ? '支持托管续播' : '依赖播放器自身续播',
-      color: player.supportsManagedResume ? 'success' : 'info',
     },
   ]
 }

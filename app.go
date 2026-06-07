@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -50,6 +49,7 @@ type SettingsView struct {
 	CleanTitleDisplay    bool                  `json:"cleanTitleDisplay"`
 	UIScalePercent       int                   `json:"uiScalePercent"`
 	ThemeMode            string                `json:"themeMode"`
+	ThemeColor           string                `json:"themeColor"`
 	SmallFileFilterMB    int                   `json:"smallFileFilterMB"`
 	FileListDensity      string                `json:"fileListDensity"`
 	OfflineRecentTargets []DirectoryTargetView `json:"offlineRecentTargets"`
@@ -241,12 +241,13 @@ func (a *App) SetHiddenMode(enabled bool, password string, rememberPassword bool
 	return status, nil
 }
 
-func (a *App) ListDirectory(dirID string, offset int, limit int) (*pan.DirectoryView, error) {
-	result, err := a.pan.ListDirectory(dirID, offset, limit)
+func (a *App) ListDirectory(dirID string, offset int, limit int, sortMode string) (*pan.DirectoryView, error) {
+	result, err := a.pan.ListDirectory(dirID, offset, limit, sortMode)
 	if err != nil {
 		return nil, err
 	}
 	a.enrichPlaybackItems(result.Items)
+	a.syncHiddenModeFromItems(result.Items)
 
 	a.mu.Lock()
 	a.state.LastDirectoryID = result.DirID
@@ -261,11 +262,12 @@ func (a *App) ListDirectory(dirID string, offset int, limit int) (*pan.Directory
 }
 
 func (a *App) PreviewDirectory(dirID string) (*pan.DirectoryView, error) {
-	result, err := a.pan.ListDirectory(dirID, 0, pan.DefaultPreviewLimit())
+	result, err := a.pan.ListDirectory(dirID, 0, pan.DefaultPreviewLimit(), "folders")
 	if err != nil {
 		return nil, err
 	}
 	a.enrichPlaybackItems(result.Items)
+	a.syncHiddenModeFromItems(result.Items)
 	return result, nil
 }
 
@@ -275,6 +277,7 @@ func (a *App) SearchFiles(keyword string, offset int, limit int) (*pan.SearchRes
 		return nil, err
 	}
 	a.enrichPlaybackItems(result.Items)
+	a.syncHiddenModeFromItems(result.Items)
 	return result, nil
 }
 
@@ -295,7 +298,6 @@ func (a *App) PlayFile(req PlayRequest) (*PlayResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	logDir := filepath.Dir(a.store.Path())
 
 	if err := a.proxy.Probe(req.PickCode, req.Name); err != nil {
 		a.logger.Error("stream probe failed", "pickcode", req.PickCode, "name", req.Name, "error", err)
@@ -306,89 +308,27 @@ func (a *App) PlayFile(req PlayRequest) (*PlayResult, error) {
 		PreferredPlayer: settings.PreferredPlayer,
 		PlayerPaths:     settings.PlayerPaths,
 		DisabledPlayers: settings.DisabledPlayers,
-		LogDir:          logDir,
 	})
 
 	result, err := launcher.Launch(player.Request{
-		URL:              streamURL,
-		Title:            req.Name,
-		StartMS:          startMS,
-		Subtitle:         subtitlePath,
-		ManagedResumeDir: filepath.Join(logDir, "mpv-watch-later"),
+		URL:      streamURL,
+		Title:    req.Name,
+		StartMS:  startMS,
+		Subtitle: subtitlePath,
 	})
 	if err != nil {
 		return nil, err
 	}
-	a.rememberLaunchPreference(req.PickCode, req.Name, result.PlayerID, subtitlePath, startMS, result.SupportsManagedResume())
-	a.trackManagedResume(result, req.PickCode, req.Name, subtitlePath, time.Now())
+	a.rememberLaunchPreference(req.PickCode, req.Name, result.PlayerID, subtitlePath, startMS)
+	a.trackMPVIPCResume(result, req.PickCode, req.Name, subtitlePath)
 	return &PlayResult{
-		PlayerID:      result.PlayerID,
-		PlayerName:    result.PlayerName,
-		Path:          result.Path,
-		StartMS:       startMS,
-		ResumeUsed:    !req.FromStart && req.StartMS <= 0 && startMS > 0,
-		Subtitle:      subtitlePath,
-		ManagedResume: result.SupportsManagedResume(),
-	}, nil
-}
-
-func (a *App) PrepareBuiltinPlayback(req PlayRequest) (*BuiltinPlaybackSource, error) {
-	req, record := a.normalizePlayRequest(req)
-	if req.PickCode == "" {
-		return nil, errors.New("缺少 pickcode，无法播放")
-	}
-
-	startMS := a.resolveStartPosition(req, record)
-	a.preSavePlaybackStart(req, startMS)
-
-	subtitlePath := a.prepareSubtitlePath(req.PickCode, a.selectedSubtitlePath(req.PickCode, req.Subtitle))
-	streamURL := a.proxy.StreamURL(req.PickCode, req.Name)
-
-	if err := a.proxy.Probe(req.PickCode, req.Name); err != nil {
-		a.logger.Error("stream probe failed", "pickcode", req.PickCode, "name", req.Name, "error", err)
-		return nil, err
-	}
-
-	result := &BuiltinPlaybackSource{
-		URL:        streamURL,
-		Title:      req.Name,
+		PlayerID:   result.PlayerID,
+		PlayerName: result.PlayerName,
+		Path:       result.Path,
 		StartMS:    startMS,
 		ResumeUsed: !req.FromStart && req.StartMS <= 0 && startMS > 0,
-	}
-
-	if subtitlePath != "" {
-		result.SubtitlePath = subtitlePath
-		result.SubtitleName = filepath.Base(subtitlePath)
-		subtitleURL, subtitleType, ok := a.proxy.SubtitleURL(subtitlePath)
-		result.SubtitleURL = subtitleURL
-		result.SubtitleType = subtitleType
-		result.SubtitleUsable = ok
-	}
-
-	return result, nil
-}
-
-func (a *App) SavePlaybackProgress(pickCode, name string, positionMS int64) (*PlaybackStateView, error) {
-	pickCode = strings.TrimSpace(pickCode)
-	if pickCode == "" {
-		return nil, errors.New("缺少 pickcode")
-	}
-	if positionMS < 0 {
-		positionMS = 0
-	}
-
-	if err := a.upsertPlaybackRecord(pickCode, func(record *config.PlaybackRecord) bool {
-		if strings.TrimSpace(name) != "" {
-			record.FileName = strings.TrimSpace(name)
-		}
-		record.LastPositionMS = positionMS
-		record.LastPlayedAt = time.Now().Format(time.RFC3339)
-		return record.LastPositionMS > 0 || strings.TrimSpace(record.SubtitlePath) != ""
-	}); err != nil {
-		return nil, err
-	}
-
-	return a.playbackStateView(pickCode), nil
+		Subtitle:   subtitlePath,
+	}, nil
 }
 
 func (a *App) SelectPlayerPath(playerID string) (*SettingsView, error) {
@@ -564,6 +504,21 @@ func (a *App) SaveThemeMode(value string) (*SettingsView, error) {
 	return &view, nil
 }
 
+func (a *App) SaveThemeColor(value string) (*SettingsView, error) {
+	a.mu.Lock()
+	a.state.Settings = normalizeAppSettings(a.state.Settings)
+	a.state.Settings.ThemeColor = normalizeThemeColor(value)
+	state := cloneState(a.state)
+	a.mu.Unlock()
+
+	if err := a.store.Save(state); err != nil {
+		return nil, err
+	}
+
+	view := a.settingsView()
+	return &view, nil
+}
+
 func (a *App) SaveSmallFileFilterMB(value int) (*SettingsView, error) {
 	a.mu.Lock()
 	a.state.Settings = normalizeAppSettings(a.state.Settings)
@@ -685,6 +640,7 @@ func (a *App) settingsView() SettingsView {
 		CleanTitleDisplay:    !settings.DisableCleanTitleDisplay,
 		UIScalePercent:       settings.UIScalePercent,
 		ThemeMode:            settings.ThemeMode,
+		ThemeColor:           settings.ThemeColor,
 		SmallFileFilterMB:    settings.SmallFileFilterMB,
 		FileListDensity:      settings.FileListDensity,
 		OfflineRecentTargets: buildDirectoryTargetViews(settings.OfflineRecentTargets),
@@ -714,6 +670,36 @@ func (a *App) syncSessionState() {
 	if err := a.store.Save(state); err != nil {
 		a.logger.Warn("failed to persist session state", "error", err)
 	}
+}
+
+func (a *App) syncHiddenModeFromItems(items []pan.FileItem) {
+	if !hasHiddenFileItem(items) {
+		return
+	}
+
+	a.pan.RestoreHiddenMode(true)
+
+	a.mu.Lock()
+	if a.state.HiddenModeEnabled {
+		a.mu.Unlock()
+		return
+	}
+	a.state.HiddenModeEnabled = true
+	state := cloneState(a.state)
+	a.mu.Unlock()
+
+	if err := a.store.Save(state); err != nil {
+		a.logger.Warn("failed to persist hidden mode state", "error", err)
+	}
+}
+
+func hasHiddenFileItem(items []pan.FileItem) bool {
+	for _, item := range items {
+		if item.IsHiddenFile {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *App) currentHiddenModePasswordMD5() string {
@@ -811,6 +797,7 @@ func normalizeAppSettings(settings config.Settings) config.Settings {
 	settings.FileListDensity = normalizeFileListDensity(settings.FileListDensity)
 	settings.UIScalePercent = normalizeUIScalePercent(settings.UIScalePercent)
 	settings.ThemeMode = normalizeThemeMode(settings.ThemeMode)
+	settings.ThemeColor = normalizeThemeColor(settings.ThemeColor)
 	settings.OfflineRecentTargets = config.NormalizeOfflineRecentTargets(settings.OfflineRecentTargets)
 	settings.HideSmallFiles = false
 	if settings.DisabledPlayers[settings.PreferredPlayer] {
@@ -941,5 +928,14 @@ func normalizeThemeMode(value string) string {
 		return strings.ToLower(strings.TrimSpace(value))
 	default:
 		return "system"
+	}
+}
+
+func normalizeThemeColor(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "blue", "teal", "sky", "royal", "cyan", "emerald", "green", "lime", "yellow", "amber", "orange", "red", "rose", "pink", "fuchsia", "purple", "violet", "indigo", "gray", "slate":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return "blue"
 	}
 }

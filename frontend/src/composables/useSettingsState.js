@@ -7,6 +7,7 @@ import {
   SavePreferredPlayer,
   SaveSmallFileFilterMB,
   SaveShowTitleBadgesEnabled,
+  SaveThemeColor,
   SaveThemeMode,
   SaveUIScalePercent,
   SelectPlayerPath,
@@ -15,12 +16,13 @@ import {
   createDefaultSettings,
   normalizeFileListDensity,
   normalizeSettingsView,
+  normalizeThemeColor,
   normalizeThemeMode,
   normalizeUIScalePercent,
 } from '../utils/settings'
 import { isUserCancelledError } from '../utils/error'
 
-export function useSettingsState({ showNotice, showError, refreshFilePresentation, applyUIScale, applyThemeMode }) {
+export function useSettingsState({ showNotice, showError, refreshFilePresentation, applyUIScale, applyThemeMode, applyThemeColor }) {
   const settingsTab = ref('player')
   const settings = ref(createDefaultSettings())
   const playerLoading = ref(false)
@@ -38,6 +40,7 @@ export function useSettingsState({ showNotice, showError, refreshFilePresentatio
     smallFileFilterMB.value = Number(settings.value.smallFileFilterMB || 0)
     applyUIScale?.(settings.value.uiScalePercent)
     applyThemeMode?.(settings.value.themeMode)
+    applyThemeColor?.(settings.value.themeColor)
   }
 
   async function changePreferredPlayer(playerId) {
@@ -125,6 +128,17 @@ export function useSettingsState({ showNotice, showError, refreshFilePresentatio
     }
   }
 
+  async function saveThemeColor(value) {
+    const nextValue = normalizeThemeColor(value)
+
+    try {
+      applySettingsView(await SaveThemeColor(nextValue))
+      showNotice('success', '主题色已保存。')
+    } catch (error) {
+      showError(error, '保存主题色失败')
+    }
+  }
+
   async function choosePlayerPath(playerId = selectedPlayer.value?.id || settings.value?.preferredPlayer || 'mpv') {
     playerLoading.value = true
 
@@ -195,6 +209,7 @@ export function useSettingsState({ showNotice, showError, refreshFilePresentatio
     saveCleanTitleDisplay,
     saveUIScale,
     saveThemeMode,
+    saveThemeColor,
     saveSmallFileFilter,
     saveFileListDensity,
     choosePlayerPath,

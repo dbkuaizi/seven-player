@@ -25,15 +25,14 @@ type Settings struct {
 	PreferredPlayer string
 	PlayerPaths     map[string]string
 	DisabledPlayers map[string]bool
-	LogDir          string
 }
 
 type Request struct {
-	URL              string
-	Title            string
-	StartMS          int64
-	Subtitle         string
-	ManagedResumeDir string
+	URL       string
+	Title     string
+	StartMS   int64
+	Subtitle  string
+	IPCServer string
 }
 
 type Status struct {
@@ -47,15 +46,14 @@ type Status struct {
 	Source                string `json:"source,omitempty"`
 	SupportsStartPosition bool   `json:"supportsStartPosition"`
 	SupportsSubtitle      bool   `json:"supportsSubtitle"`
-	SupportsManagedResume bool   `json:"supportsManagedResume"`
 }
 
 type LaunchResult struct {
-	PlayerID              string `json:"playerId"`
-	PlayerName            string `json:"playerName"`
-	Path                  string `json:"path"`
-	done                  <-chan error
-	supportsManagedResume bool
+	PlayerID   string `json:"playerId"`
+	PlayerName string `json:"playerName"`
+	Path       string `json:"path"`
+	IPCServer  string `json:"-"`
+	done       <-chan error
 }
 
 type Launcher struct {
@@ -68,16 +66,15 @@ type adapter struct {
 	oses                  []string
 	binaries              []string
 	commonPaths           func() []string
-	buildArgs             func(req Request, executablePath string, logPath string) []string
+	buildArgs             func(req Request, executablePath string) []string
 	supportsStartPosition bool
 	supportsSubtitle      bool
-	supportsManagedResume bool
 }
 
 var registry = []*adapter{
 	{
 		id:       PlayerMPV,
-		name:     "mpv",
+		name:     "MPV",
 		oses:     []string{"windows", "linux", "darwin"},
 		binaries: []string{"mpv.exe", "mpv"},
 		commonPaths: func() []string {
@@ -89,7 +86,6 @@ var registry = []*adapter{
 		buildArgs:             buildMPVArgs,
 		supportsStartPosition: true,
 		supportsSubtitle:      true,
-		supportsManagedResume: true,
 	},
 	{
 		id:       PlayerVLC,
@@ -183,7 +179,6 @@ func Statuses(settings Settings) []Status {
 			Disabled:              settings.DisabledPlayers[spec.id],
 			SupportsStartPosition: spec.supportsStartPosition,
 			SupportsSubtitle:      spec.supportsSubtitle,
-			SupportsManagedResume: spec.supportsManagedResume,
 		}
 
 		if status.Supported {
@@ -225,12 +220,12 @@ func (l *Launcher) Launch(req Request) (*LaunchResult, error) {
 			continue
 		}
 
-		logPath := ""
-		if strings.TrimSpace(settings.LogDir) != "" && spec.id == PlayerMPV {
-			logPath = filepath.Join(settings.LogDir, spec.id+".log")
+		launchReq := req
+		if spec.id == PlayerMPV {
+			launchReq.IPCServer = newMPVIPCServerName()
 		}
 
-		args := spec.buildArgs(req, path, logPath)
+		args := spec.buildArgs(launchReq, path)
 		cmd := exec.Command(path, args...)
 		hideConsoleWindow(cmd)
 		if err := cmd.Start(); err != nil {
@@ -246,22 +241,16 @@ func (l *Launcher) Launch(req Request) (*LaunchResult, error) {
 		select {
 		case err := <-waitCh:
 			if err != nil {
-				if logPath != "" {
-					return nil, fmt.Errorf("%s 启动后立即退出，请查看日志: %s", spec.name, logPath)
-				}
 				return nil, fmt.Errorf("%s 启动后立即退出: %w", spec.name, err)
-			}
-			if logPath != "" {
-				return nil, fmt.Errorf("%s 启动后立即退出，请查看日志: %s", spec.name, logPath)
 			}
 			return nil, fmt.Errorf("%s 启动后立即退出", spec.name)
 		case <-time.After(1500 * time.Millisecond):
 			return &LaunchResult{
-				PlayerID:              spec.id,
-				PlayerName:            spec.name,
-				Path:                  path,
-				done:                  waitCh,
-				supportsManagedResume: spec.supportsManagedResume,
+				PlayerID:   spec.id,
+				PlayerName: spec.name,
+				Path:       path,
+				IPCServer:  launchReq.IPCServer,
+				done:       waitCh,
 			}, nil
 		}
 	}
@@ -359,7 +348,7 @@ func (a *adapter) supports(goos string) bool {
 
 func (a *adapter) validateRequest(req Request) error {
 	if req.StartMS > 0 && !a.supportsStartPosition {
-		return fmt.Errorf("%s 不支持从指定时间启动，请改用 mpv、VLC 或 PotPlayer", a.name)
+		return fmt.Errorf("%s 不支持从指定时间启动，请改用 MPV、VLC 或 PotPlayer", a.name)
 	}
 	if strings.TrimSpace(req.Subtitle) != "" && !a.supportsSubtitle {
 		return fmt.Errorf("%s 不支持外挂字幕参数，请切换到支持字幕文件的播放器", a.name)
@@ -420,23 +409,11 @@ func windowsPaths(relatives ...string) []string {
 	return paths
 }
 
-func buildMPVArgs(req Request, _ string, logPath string) []string {
+func buildMPVArgs(req Request, _ string) []string {
 	args := []string{"--force-window=yes"}
-	if strings.TrimSpace(req.ManagedResumeDir) != "" {
-		if err := os.MkdirAll(req.ManagedResumeDir, 0o755); err == nil {
-			args = append(args,
-				"--resume-playback=no",
-				"--save-position-on-quit",
-				"--watch-later-options=start",
-				"--watch-later-directory="+req.ManagedResumeDir,
-				"--write-filename-in-watch-later-config",
-			)
-		}
-	}
-	if strings.TrimSpace(logPath) != "" {
-		if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err == nil {
-			args = append(args, "--log-file="+logPath)
-		}
+	args = append(args, "--resume-playback=no")
+	if strings.TrimSpace(req.IPCServer) != "" {
+		args = append(args, "--input-ipc-server="+req.IPCServer)
 	}
 	if strings.TrimSpace(req.Title) != "" {
 		args = append(args, "--title="+req.Title)
@@ -451,7 +428,7 @@ func buildMPVArgs(req Request, _ string, logPath string) []string {
 	return args
 }
 
-func buildVLCArgs(req Request, _ string, _ string) []string {
+func buildVLCArgs(req Request, _ string) []string {
 	args := []string{"--no-video-title-show"}
 	if strings.TrimSpace(req.Subtitle) != "" {
 		args = append(args, "--sub-file="+req.Subtitle)
@@ -463,7 +440,7 @@ func buildVLCArgs(req Request, _ string, _ string) []string {
 	return args
 }
 
-func buildPotPlayerArgs(req Request, _ string, _ string) []string {
+func buildPotPlayerArgs(req Request, _ string) []string {
 	args := []string{req.URL}
 	if req.StartMS > 0 {
 		args = append(args, "/seek="+formatClock(req.StartMS))
@@ -474,7 +451,7 @@ func buildPotPlayerArgs(req Request, _ string, _ string) []string {
 	return args
 }
 
-func buildMPCArgs(req Request, _ string, _ string) []string {
+func buildMPCArgs(req Request, _ string) []string {
 	args := []string{req.URL}
 	if strings.TrimSpace(req.Subtitle) != "" {
 		args = append(args, "/sub", req.Subtitle)
@@ -484,10 +461,6 @@ func buildMPCArgs(req Request, _ string, _ string) []string {
 
 func (r *LaunchResult) Done() <-chan error {
 	return r.done
-}
-
-func (r *LaunchResult) SupportsManagedResume() bool {
-	return r != nil && r.supportsManagedResume
 }
 
 func formatSeconds(ms int64) string {

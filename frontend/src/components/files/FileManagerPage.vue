@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import PageSizeMenu from '../app/PageSizeMenu.vue'
 
 const props = defineProps({
   loggedIn: { type: Boolean, default: false },
@@ -255,8 +256,12 @@ function breadcrumbLabel(item) {
                 <button
                   type="button"
                   class="file-breadcrumb-link"
-                  :class="{ 'file-breadcrumb-link--disabled': item.disabled }"
+                  :class="{
+                    'file-breadcrumb-link--disabled': item.disabled,
+                    'file-breadcrumb-link--last': item.isLast,
+                  }"
                   :disabled="item.disabled"
+                  :title="item.rawTitle || item.title"
                   @click="emit('open-breadcrumb', item.id)"
                 >
                   {{ breadcrumbLabel(item) }}
@@ -591,16 +596,9 @@ function breadcrumbLabel(item) {
           </div>
 
           <div class="pagination-controls">
-            <v-select
+            <PageSizeMenu
               :model-value="props.pageSize"
-              class="page-size-select"
-              density="compact"
-              hide-details
-              item-title="title"
-              item-value="value"
-              menu-icon="mdi-chevron-down"
               :items="props.pageSizeOptions"
-              variant="plain"
               @update:model-value="emit('page-size-change', $event)"
             />
 

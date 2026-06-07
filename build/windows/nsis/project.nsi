@@ -20,10 +20,10 @@ Unicode true
 ## The following information is taken from the wails_tools.nsh file, but they can be overwritten here.
 ####
 ## !define INFO_PROJECTNAME    "seven-player" # Default "seven-player"
-## !define INFO_COMPANYNAME    "OpenAI Codex" # Default "OpenAI Codex"
+## !define INFO_COMPANYNAME    "两双筷子" # Default "两双筷子"
 ## !define INFO_PRODUCTNAME    "Seven Player" # Default "Seven Player"
 ## !define INFO_PRODUCTVERSION "1.0.0"     # Default "0.1.0"
-## !define INFO_COPYRIGHT      "(c) 2026, OpenAI Codex" # Default "(c) 2026, OpenAI Codex"
+## !define INFO_COPYRIGHT      "(c) 2026, 两双筷子" # Default "(c) 2026, 两双筷子"
 ###
 ## !define PRODUCT_EXECUTABLE  "Application.exe"      # Default "${INFO_PROJECTNAME}.exe"
 ## !define UNINST_KEY_NAME     "UninstKeyInRegistry"  # Default "${INFO_COMPANYNAME}${INFO_PRODUCTNAME}"

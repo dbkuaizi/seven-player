@@ -3,6 +3,7 @@ module sevenplayer
 go 1.25.0
 
 require (
+	github.com/Microsoft/go-winio v0.6.2
 	github.com/google/uuid v1.6.0
 	github.com/jianxcao/115driver v1.0.30-beta
 	github.com/wailsapp/wails/v3 v3.0.0-alpha.80
@@ -11,7 +12,6 @@ require (
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
-	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/ProtonMail/go-crypto v1.3.0 // indirect
 	github.com/adrg/xdg v0.5.3 // indirect
 	github.com/aead/ecdh v0.2.0 // indirect

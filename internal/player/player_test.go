@@ -53,20 +53,17 @@ func TestResolveCustomPath(t *testing.T) {
 
 func TestBuildMPVArgs(t *testing.T) {
 	args := buildMPVArgs(Request{
-		URL:              "https://example.com/video.mp4",
-		Title:            "Demo",
-		Subtitle:         "E:/sub/demo.srt",
-		StartMS:          90500,
-		ManagedResumeDir: "E:/watchlater",
-	}, "", "")
+		URL:       "https://example.com/video.mp4",
+		Title:     "Demo",
+		Subtitle:  "E:/sub/demo.srt",
+		StartMS:   90500,
+		IPCServer: `\\.\pipe\seven-player-mpv-test`,
+	}, "")
 
 	want := []string{
 		"--force-window=yes",
 		"--resume-playback=no",
-		"--save-position-on-quit",
-		"--watch-later-options=start",
-		"--watch-later-directory=E:/watchlater",
-		"--write-filename-in-watch-later-config",
+		`--input-ipc-server=\\.\pipe\seven-player-mpv-test`,
 		"--title=Demo",
 		"--sub-file=E:/sub/demo.srt",
 		"--start=90.5",
@@ -82,7 +79,7 @@ func TestBuildPotPlayerArgs(t *testing.T) {
 		URL:      "https://example.com/video.mp4",
 		Subtitle: "E:/sub/demo.srt",
 		StartMS:  90500,
-	}, "", "")
+	}, "")
 
 	want := []string{
 		"https://example.com/video.mp4",

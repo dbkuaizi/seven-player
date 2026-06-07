@@ -14,6 +14,16 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+const appDataDirName = "seven-player"
+
+func appDataDir() (string, error) {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(configDir, appDataDirName), nil
+}
+
 func main() {
 	logger := newLogger()
 
@@ -65,9 +75,8 @@ func main() {
 func newLogger() *slog.Logger {
 	writer := io.Writer(os.Stdout)
 
-	configDir, err := os.UserConfigDir()
+	logDir, err := appDataDir()
 	if err == nil {
-		logDir := filepath.Join(configDir, "seven-player")
 		if mkErr := os.MkdirAll(logDir, 0o755); mkErr == nil {
 			logFilePath := filepath.Join(logDir, "seven-player.log")
 			logFile, openErr := os.OpenFile(logFilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)

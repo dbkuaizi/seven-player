@@ -43,6 +43,31 @@ func TestBreadcrumbsFromRawPath(t *testing.T) {
 	}
 }
 
+func TestDirectoryListSortParams(t *testing.T) {
+	cases := []struct {
+		mode        string
+		wantOrder   string
+		wantAsc     string
+		wantFCMix   string
+		wantNatsort string
+		wantCustom  string
+	}{
+		{mode: "", wantOrder: "file_name", wantAsc: "1", wantFCMix: "1", wantNatsort: "1", wantCustom: "2"},
+		{mode: "folders", wantOrder: "file_name", wantAsc: "1", wantFCMix: "1", wantNatsort: "1", wantCustom: "2"},
+		{mode: "resume", wantOrder: "file_name", wantAsc: "1", wantFCMix: "1", wantNatsort: "1", wantCustom: "2"},
+		{mode: "name", wantOrder: "file_name", wantAsc: "1", wantFCMix: "1", wantNatsort: "1", wantCustom: "2"},
+		{mode: "updated", wantOrder: "user_ptime", wantAsc: "1", wantFCMix: "1", wantNatsort: "0", wantCustom: "2"},
+		{mode: "size", wantOrder: "file_size", wantAsc: "1", wantFCMix: "1", wantNatsort: "0", wantCustom: "2"},
+	}
+
+	for _, tc := range cases {
+		got := directoryListSortParams(tc.mode)
+		if got.order != tc.wantOrder || got.asc != tc.wantAsc || got.fcMix != tc.wantFCMix || got.natsort != tc.wantNatsort || got.customOrder != tc.wantCustom {
+			t.Fatalf("directoryListSortParams(%q) = %+v", tc.mode, got)
+		}
+	}
+}
+
 func TestMD5Hex(t *testing.T) {
 	want := md5.Sum([]byte("123456"))
 	got := md5Hex("123456")

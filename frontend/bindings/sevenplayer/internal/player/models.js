@@ -82,13 +82,6 @@ export class Status {
              */
             this["supportsSubtitle"] = false;
         }
-        if (!("supportsManagedResume" in $$source)) {
-            /**
-             * @member
-             * @type {boolean}
-             */
-            this["supportsManagedResume"] = false;
-        }
 
         Object.assign(this, $$source);
     }

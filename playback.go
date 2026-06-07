@@ -25,25 +25,12 @@ type PlayRequest struct {
 }
 
 type PlayResult struct {
-	PlayerID      string `json:"playerId"`
-	PlayerName    string `json:"playerName"`
-	Path          string `json:"path"`
-	StartMS       int64  `json:"startMs"`
-	ResumeUsed    bool   `json:"resumeUsed"`
-	Subtitle      string `json:"subtitle,omitempty"`
-	ManagedResume bool   `json:"managedResume"`
-}
-
-type BuiltinPlaybackSource struct {
-	URL            string `json:"url"`
-	Title          string `json:"title"`
-	StartMS        int64  `json:"startMs"`
-	ResumeUsed     bool   `json:"resumeUsed"`
-	SubtitleURL    string `json:"subtitleUrl,omitempty"`
-	SubtitleName   string `json:"subtitleName,omitempty"`
-	SubtitlePath   string `json:"subtitlePath,omitempty"`
-	SubtitleType   string `json:"subtitleType,omitempty"`
-	SubtitleUsable bool   `json:"subtitleUsable"`
+	PlayerID   string `json:"playerId"`
+	PlayerName string `json:"playerName"`
+	Path       string `json:"path"`
+	StartMS    int64  `json:"startMs"`
+	ResumeUsed bool   `json:"resumeUsed"`
+	Subtitle   string `json:"subtitle,omitempty"`
 }
 
 type PlaybackStateView struct {
@@ -233,7 +220,7 @@ func (a *App) prepareSubtitlePath(pickCode, path string) string {
 	return ""
 }
 
-func (a *App) rememberLaunchPreference(pickCode, name, playerID, subtitlePath string, startMS int64, persistProgress bool) {
+func (a *App) rememberLaunchPreference(pickCode, name, playerID, subtitlePath string, startMS int64) {
 	if err := a.upsertPlaybackRecord(pickCode, func(record *config.PlaybackRecord) bool {
 		if strings.TrimSpace(name) != "" {
 			record.FileName = name
@@ -244,7 +231,7 @@ func (a *App) rememberLaunchPreference(pickCode, name, playerID, subtitlePath st
 		if subtitlePath != "" {
 			record.SubtitlePath = subtitlePath
 		}
-		if startMS > 0 && !persistProgress {
+		if startMS > 0 {
 			record.LastPositionMS = startMS
 			record.LastPlayedAt = time.Now().Format(time.RFC3339)
 		}
@@ -254,41 +241,99 @@ func (a *App) rememberLaunchPreference(pickCode, name, playerID, subtitlePath st
 	}
 }
 
-func (a *App) trackManagedResume(result *player.LaunchResult, pickCode, name, subtitlePath string, launchedAt time.Time) {
-	if result == nil || !result.SupportsManagedResume() || result.Done() == nil {
+func (a *App) trackMPVIPCResume(result *player.LaunchResult, pickCode, name, subtitlePath string) {
+	if result == nil || result.PlayerID != player.PlayerMPV || strings.TrimSpace(result.IPCServer) == "" || result.Done() == nil {
 		return
 	}
 
-	watchLaterDir := filepath.Join(filepath.Dir(a.store.Path()), "mpv-watch-later")
-
 	go func() {
-		err, ok := <-result.Done()
-		if ok && err != nil {
-			a.logger.Warn("managed player exited with error", "player", result.PlayerID, "pickcode", pickCode, "error", err)
-		}
-
-		state, findErr := player.FindMPVWatchLaterState(watchLaterDir, "pickcode="+pickCode, launchedAt)
-		if findErr != nil {
-			a.logger.Warn("failed to read mpv watch-later state", "pickcode", pickCode, "error", findErr)
+		client, err := dialMPVIPCWithRetry(result.IPCServer, result.Done(), 3*time.Second)
+		if err != nil {
+			a.logger.Warn("failed to connect MPV IPC", "pickcode", pickCode, "error", err)
 			return
 		}
-		if state == nil {
-			return
-		}
+		defer client.Close()
 
-		if saveErr := a.upsertPlaybackRecord(pickCode, func(record *config.PlaybackRecord) bool {
-			record.FileName = chooseName(record.FileName, name)
-			record.LastPlayerID = player.PlayerMPV
-			record.LastPositionMS = state.StartMS
-			record.LastPlayedAt = time.Now().Format(time.RFC3339)
-			if subtitlePath != "" {
-				record.SubtitlePath = subtitlePath
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+
+		lastPositionMS := int64(0)
+		save := func(positionMS int64) {
+			if positionMS <= 0 {
+				return
 			}
-			return record.LastPositionMS > 0 || strings.TrimSpace(record.SubtitlePath) != ""
-		}); saveErr != nil {
-			a.logger.Warn("failed to persist managed resume state", "pickcode", pickCode, "error", saveErr)
+			lastPositionMS = positionMS
+			a.persistMPVIPCResume(pickCode, name, subtitlePath, positionMS)
+		}
+
+		for {
+			select {
+			case err, ok := <-result.Done():
+				if ok && err != nil {
+					a.logger.Warn("MPV exited with error", "pickcode", pickCode, "error", err)
+				}
+				positionMS, readErr := client.TimePositionMS()
+				if readErr == nil {
+					save(positionMS)
+				} else if lastPositionMS > 0 {
+					save(lastPositionMS)
+				}
+				return
+			case <-ticker.C:
+				positionMS, readErr := client.TimePositionMS()
+				if readErr != nil {
+					a.logger.Debug("failed to read MPV IPC position", "pickcode", pickCode, "error", readErr)
+					continue
+				}
+				save(positionMS)
+			}
 		}
 	}()
+}
+
+func dialMPVIPCWithRetry(server string, done <-chan error, timeout time.Duration) (*player.MPVIPCClient, error) {
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+
+	for time.Now().Before(deadline) {
+		select {
+		case <-done:
+			if lastErr != nil {
+				return nil, lastErr
+			}
+			return nil, errors.New("MPV exited before IPC became available")
+		default:
+		}
+
+		client, err := player.DialMPVIPC(server, 200*time.Millisecond)
+		if err == nil {
+			return client, nil
+		}
+		lastErr = err
+		time.Sleep(120 * time.Millisecond)
+	}
+
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, errors.New("MPV IPC connection timed out")
+}
+
+func (a *App) persistMPVIPCResume(pickCode, name, subtitlePath string, positionMS int64) {
+	if err := a.upsertPlaybackRecord(pickCode, func(record *config.PlaybackRecord) bool {
+		if strings.TrimSpace(name) != "" {
+			record.FileName = name
+		}
+		record.LastPlayerID = player.PlayerMPV
+		record.LastPositionMS = positionMS
+		record.LastPlayedAt = time.Now().Format(time.RFC3339)
+		if subtitlePath != "" {
+			record.SubtitlePath = subtitlePath
+		}
+		return record.LastPositionMS > 0 || strings.TrimSpace(record.SubtitlePath) != ""
+	}); err != nil {
+		a.logger.Warn("failed to persist MPV IPC resume", "pickcode", pickCode, "error", err)
+	}
 }
 
 func buildPlaybackStateView(record config.PlaybackRecord) *PlaybackStateView {
@@ -335,13 +380,6 @@ func padTwo(value int64) string {
 
 func strconvI64(value int64) string {
 	return strconv.FormatInt(value, 10)
-}
-
-func chooseName(existing, fallback string) string {
-	if strings.TrimSpace(fallback) != "" {
-		return strings.TrimSpace(fallback)
-	}
-	return strings.TrimSpace(existing)
 }
 
 func playOnceWithPlayer(settings config.Settings, playerID string) (config.Settings, error) {

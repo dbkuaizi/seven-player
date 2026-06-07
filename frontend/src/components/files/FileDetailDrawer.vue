@@ -15,16 +15,13 @@ const emit = defineEmits([
   'primary-action',
   'play',
   'play-with-player',
-  'builtin-play',
-  'play-from-start',
-  'jump',
   'choose-subtitle',
   'clear-subtitle',
   'clear-progress',
 ])
 
 const selectablePlayers = computed(() =>
-  props.playerOptions.filter((player) => player?.supported && !player.disabled),
+  props.playerOptions.filter((player) => player?.available && !player.disabled),
 )
 
 function playWithPlayer(player) {
@@ -115,62 +112,34 @@ function playWithPlayer(player) {
                   <v-list-item
                     v-for="player in selectablePlayers"
                     :key="player.id"
-                    :disabled="!player.available"
                     @click="playWithPlayer(player)"
                   >
                     <template #prepend>
                       <v-icon
-                        :color="player.available ? 'primary' : 'medium-emphasis'"
-                        :icon="player.available ? 'mdi-play-circle-outline' : 'mdi-alert-circle-outline'"
+                        color="primary"
+                        icon="mdi-play-circle-outline"
                       />
                     </template>
                     <v-list-item-title>{{ player.name }}</v-list-item-title>
                     <v-list-item-subtitle>
-                      {{
-                        player.available
-                          ? player.selected
-                            ? '当前默认'
-                            : '使用此播放器播放'
-                          : '未检测到可执行文件'
-                      }}
+                      {{ player.selected ? '当前默认' : '使用此播放器播放' }}
                     </v-list-item-subtitle>
                   </v-list-item>
                 </v-list>
               </v-menu>
             </div>
-            <v-btn
-              variant="tonal"
-              block
-              prepend-icon="mdi-monitor-play"
-              @click="emit('builtin-play', props.selectedItem)"
-            >
-              内置播放
-            </v-btn>
-            <v-btn
-              variant="tonal"
-              block
-              prepend-icon="mdi-replay"
-              @click="emit('play-from-start', props.selectedItem)"
-            >
-              从头播放
-            </v-btn>
-            <v-btn
-              variant="text"
-              block
-              prepend-icon="mdi-timeline-clock-outline"
-              @click="emit('jump', props.selectedItem)"
-            >
-              跳转播放
-            </v-btn>
           </template>
         </div>
 
         <v-list class="mt-4" density="compact" lines="two">
           <v-list-item
             v-if="props.selectedItem.originalName && props.selectedItem.originalName !== props.selectedItem.displayName"
-            title="原始文件名"
-            :subtitle="props.selectedItem.originalName"
-          />
+          >
+            <v-list-item-title>原始文件名</v-list-item-title>
+            <v-list-item-subtitle class="detail-original-name">
+              {{ props.selectedItem.originalName }}
+            </v-list-item-subtitle>
+          </v-list-item>
           <v-list-item
             v-if="props.selectedItem.isHiddenFile"
             title="隐私状态"
@@ -179,7 +148,6 @@ function playWithPlayer(player) {
           <v-list-item title="类型" :subtitle="props.selectedItem.kindLabel" />
           <v-list-item title="大小" :subtitle="props.selectedItem.sizeText" />
           <v-list-item title="更新时间" :subtitle="props.selectedItem.updatedText" />
-          <v-list-item v-if="props.selectedItem.pickCode" title="PickCode" :subtitle="props.selectedItem.pickCode" />
 
           <template v-if="props.selectedItem.isVideo">
             <v-list-item title="时长" :subtitle="props.selectedItem.durationText || '--'" />

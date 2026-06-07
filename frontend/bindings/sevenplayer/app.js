@@ -87,10 +87,11 @@ export function DeletePlayerPath(playerID) {
  * @param {string} dirID
  * @param {number} offset
  * @param {number} limit
+ * @param {string} sortMode
  * @returns {$CancellablePromise<pan$0.DirectoryView | null>}
  */
-export function ListDirectory(dirID, offset, limit) {
-    return $Call.ByID(3882022436, dirID, offset, limit).then(/** @type {($result: any) => any} */(($result) => {
+export function ListDirectory(dirID, offset, limit, sortMode) {
+    return $Call.ByID(3882022436, dirID, offset, limit, sortMode).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType11($result);
     }));
 }
@@ -128,16 +129,6 @@ export function Logout() {
 export function PlayFile(req) {
     return $Call.ByID(4039908549, req).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType13($result);
-    }));
-}
-
-/**
- * @param {$models.PlayRequest} req
- * @returns {$CancellablePromise<$models.BuiltinPlaybackSource | null>}
- */
-export function PrepareBuiltinPlayback(req) {
-    return $Call.ByID(3852339662, req).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType15($result);
     }));
 }
 
@@ -185,18 +176,6 @@ export function SaveFileListDensity(value) {
 export function SaveHideSmallFilesEnabled(enabled) {
     return $Call.ByID(609920859, enabled).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType9($result);
-    }));
-}
-
-/**
- * @param {string} pickCode
- * @param {string} name
- * @param {number} positionMS
- * @returns {$CancellablePromise<$models.PlaybackStateView | null>}
- */
-export function SavePlaybackProgress(pickCode, name, positionMS) {
-    return $Call.ByID(3783574330, pickCode, name, positionMS).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
     }));
 }
 
@@ -256,6 +235,16 @@ export function SaveSmallFileFilterMB(value) {
  * @param {string} value
  * @returns {$CancellablePromise<$models.SettingsView | null>}
  */
+export function SaveThemeColor(value) {
+    return $Call.ByID(2411144936, value).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType9($result);
+    }));
+}
+
+/**
+ * @param {string} value
+ * @returns {$CancellablePromise<$models.SettingsView | null>}
+ */
 export function SaveThemeMode(value) {
     return $Call.ByID(2728365282, value).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType9($result);
@@ -280,7 +269,7 @@ export function SaveUIScalePercent(value) {
  */
 export function SearchFiles(keyword, offset, limit) {
     return $Call.ByID(3203090108, keyword, offset, limit).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType17($result);
+        return $$createType15($result);
     }));
 }
 
@@ -319,7 +308,7 @@ export function SelectTorrentFileAsMagnet() {
  */
 export function SetHiddenMode(enabled, password, rememberPassword) {
     return $Call.ByID(1668670068, enabled, password, rememberPassword).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType19($result);
+        return $$createType17($result);
     }));
 }
 
@@ -328,7 +317,7 @@ export function SetHiddenMode(enabled, password, rememberPassword) {
  */
 export function StartQRCodeLogin() {
     return $Call.ByID(2084241698).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType21($result);
+        return $$createType19($result);
     }));
 }
 
@@ -347,11 +336,9 @@ const $$createType10 = pan$0.DirectoryView.createFrom;
 const $$createType11 = $Create.Nullable($$createType10);
 const $$createType12 = $models.PlayResult.createFrom;
 const $$createType13 = $Create.Nullable($$createType12);
-const $$createType14 = $models.BuiltinPlaybackSource.createFrom;
+const $$createType14 = pan$0.SearchResultView.createFrom;
 const $$createType15 = $Create.Nullable($$createType14);
-const $$createType16 = pan$0.SearchResultView.createFrom;
+const $$createType16 = pan$0.HiddenModeStatusView.createFrom;
 const $$createType17 = $Create.Nullable($$createType16);
-const $$createType18 = pan$0.HiddenModeStatusView.createFrom;
+const $$createType18 = pan$0.LoginSessionView.createFrom;
 const $$createType19 = $Create.Nullable($$createType18);
-const $$createType20 = pan$0.LoginSessionView.createFrom;
-const $$createType21 = $Create.Nullable($$createType20);

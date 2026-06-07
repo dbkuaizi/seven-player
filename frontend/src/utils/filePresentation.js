@@ -88,6 +88,10 @@ export function normalizeFileItem(item, options = {}) {
   }
 }
 
+export function cleanDisplayTitle(name, options = {}) {
+  return buildDisplayTitle(String(name || ''), '', true, options) || String(name || '').trim()
+}
+
 export function formatResumeProgressText(resumeMs, durationSec = 0) {
   if (!resumeMs) {
     return ''

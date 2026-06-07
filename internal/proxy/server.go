@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -66,6 +67,7 @@ func (s *Server) Start() error {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/stream", s.handleStream)
+	mux.HandleFunc("/stream/", s.handleStream)
 	mux.HandleFunc("/avatar", s.handleAvatar)
 	mux.HandleFunc("/image", s.handleImage)
 	mux.HandleFunc("/subtitle", s.handleSubtitle)
@@ -107,7 +109,7 @@ func (s *Server) StreamURL(pickCode, name string) string {
 	query := url.Values{}
 	query.Set("pickcode", pickCode)
 	query.Set("name", name)
-	return fmt.Sprintf("%s/stream?%s", s.baseURL, query.Encode())
+	return fmt.Sprintf("%s/stream/%s?%s", s.baseURL, url.PathEscape(streamFileName(name)), query.Encode())
 }
 
 func (s *Server) ImageURL(rawURL string) string {
@@ -363,6 +365,7 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing pickcode", http.StatusBadRequest)
 		return
 	}
+	name := streamFileName(r.URL.Query().Get("name"))
 
 	info, err := s.provider.DownloadInfo(pickCode)
 	if err != nil {
@@ -407,7 +410,6 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 
 	for _, key := range []string{
 		"Accept-Ranges",
-		"Content-Disposition",
 		"Content-Length",
 		"Content-Range",
 		"Content-Type",
@@ -419,6 +421,7 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set(key, value)
 		}
 	}
+	w.Header().Set("Content-Disposition", contentDisposition(name))
 
 	w.WriteHeader(resp.StatusCode)
 	if resp.StatusCode >= 400 {
@@ -432,6 +435,28 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, _ = io.Copy(w, resp.Body)
+}
+
+func streamFileName(name string) string {
+	name = strings.TrimSpace(strings.ReplaceAll(name, "\\", "/"))
+	if name == "" {
+		return "video"
+	}
+	name = path.Base(name)
+	if name == "." || name == "/" {
+		return "video"
+	}
+	return name
+}
+
+func contentDisposition(name string) string {
+	name = streamFileName(name)
+	return fmt.Sprintf(`inline; filename="%s"; filename*=UTF-8''%s`, escapeQuotedFilename(name), url.PathEscape(name))
+}
+
+func escapeQuotedFilename(name string) string {
+	name = strings.ReplaceAll(name, `\`, `\\`)
+	return strings.ReplaceAll(name, `"`, `\"`)
 }
 
 func (s *Server) handleSubtitle(w http.ResponseWriter, r *http.Request) {

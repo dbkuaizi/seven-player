@@ -13,6 +13,14 @@ const (
 	maxListPageSize     = 200
 )
 
+type directoryListSort struct {
+	order       string
+	asc         string
+	fcMix       string
+	natsort     string
+	customOrder string
+}
+
 func DefaultPreviewLimit() int {
 	return defaultPreviewLimit
 }
@@ -97,16 +105,16 @@ func fileItemFromRaw(info rawFileInfo) FileItem {
 	driverInfo := info.toDriverFileInfo()
 	file := (&driver.File{}).From(&driverInfo)
 	return FileItem{
-		FileID:      file.FileID,
-		ParentID:    file.ParentID,
-		Name:        file.Name,
-		Size:        file.Size,
-		PickCode:    file.PickCode,
-		IsDirectory: file.IsDirectory,
-		IsVideo:     isVideo(file.Name, file.IsDirectory),
+		FileID:       file.FileID,
+		ParentID:     file.ParentID,
+		Name:         file.Name,
+		Size:         file.Size,
+		PickCode:     file.PickCode,
+		IsDirectory:  file.IsDirectory,
+		IsVideo:      isVideo(file.Name, file.IsDirectory),
 		IsHiddenFile: int(info.HiddenFlag) == 1,
-		UpdatedAt:   file.UpdateTime.Format(timeLayoutRFC3339),
-		DurationSec: int64(info.PlayLong),
+		UpdatedAt:    file.UpdateTime.Format(timeLayoutRFC3339),
+		DurationSec:  int64(info.PlayLong),
 	}
 }
 
@@ -146,21 +154,61 @@ func breadcrumbsFromRawPath(pathItems []rawPathItem) []Breadcrumb {
 	return crumbs
 }
 
-func (s *Service) listDirectoryPage(client *driver.Pan115Client, dirID string, offset, limit int) (*rawFileListResp, error) {
+func directoryListSortParams(mode string) directoryListSort {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "name":
+		return directoryListSort{
+			order:       driver.FileOrderByName,
+			asc:         "1",
+			fcMix:       "1",
+			natsort:     "1",
+			customOrder: "2",
+		}
+	case "updated":
+		return directoryListSort{
+			order:       driver.FileOrderByTime,
+			asc:         "1",
+			fcMix:       "1",
+			natsort:     "0",
+			customOrder: "2",
+		}
+	case "size":
+		return directoryListSort{
+			order:       driver.FileOrderBySize,
+			asc:         "1",
+			fcMix:       "1",
+			natsort:     "0",
+			customOrder: "2",
+		}
+	default:
+		return directoryListSort{
+			order:       driver.FileOrderByName,
+			asc:         "1",
+			fcMix:       "1",
+			natsort:     "1",
+			customOrder: "2",
+		}
+	}
+}
+
+func (s *Service) listDirectoryPage(client *driver.Pan115Client, dirID string, offset, limit int, sortMode string) (*rawFileListResp, error) {
 	result := rawFileListResp{}
+	sortParams := directoryListSortParams(sortMode)
 	req := client.NewRequest().
 		ForceContentType("application/json;charset=UTF-8").
 		SetQueryParams(map[string]string{
 			"aid":              "1",
 			"cid":              dirID,
+			"o":                sortParams.order,
+			"asc":              sortParams.asc,
 			"offset":           strconv.Itoa(offset),
 			"limit":            strconv.Itoa(limit),
 			"show_dir":         "1",
-			"fc_mix":           "1",
-			"natsort":          "1",
+			"fc_mix":           sortParams.fcMix,
+			"natsort":          sortParams.natsort,
 			"count_folders":    "1",
 			"record_open_time": "1",
-			"custom_order":     "0",
+			"custom_order":     sortParams.customOrder,
 			"snap":             "0",
 			"type":             "0",
 			"format":           "json",

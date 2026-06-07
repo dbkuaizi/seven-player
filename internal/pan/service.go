@@ -377,7 +377,7 @@ func (s *Service) SetHiddenMode(show bool, password string, passwordMD5 string) 
 	}, nil
 }
 
-func (s *Service) ListDirectory(dirID string, offset, limit int) (*DirectoryView, error) {
+func (s *Service) ListDirectory(dirID string, offset, limit int, sortMode string) (*DirectoryView, error) {
 	client, err := s.authenticatedClient()
 	if err != nil {
 		return nil, err
@@ -389,7 +389,7 @@ func (s *Service) ListDirectory(dirID string, offset, limit int) (*DirectoryView
 	}
 	offset, limit = normalizePageRequest(offset, limit, defaultListPageSize, maxListPageSize)
 
-	result, err := s.listDirectoryPageWithRetry(client, dirID, offset, limit)
+	result, err := s.listDirectoryPageWithRetry(client, dirID, offset, limit, sortMode)
 	if err != nil {
 		return nil, err
 	}
@@ -448,11 +448,11 @@ func (s *Service) ListDirectory(dirID string, offset, limit int) (*DirectoryView
 	return view, nil
 }
 
-func (s *Service) listDirectoryPageWithRetry(client *driver.Pan115Client, dirID string, offset, limit int) (*rawFileListResp, error) {
+func (s *Service) listDirectoryPageWithRetry(client *driver.Pan115Client, dirID string, offset, limit int, sortMode string) (*rawFileListResp, error) {
 	var lastErr error
 
 	for attempt := 0; attempt < fileAPIRetryCount; attempt++ {
-		result, err := s.listDirectoryPage(client, dirID, offset, limit)
+		result, err := s.listDirectoryPage(client, dirID, offset, limit, sortMode)
 		if err == nil {
 			return result, nil
 		}

@@ -8,12 +8,11 @@ import './main.css'
 import './styles/app.css'
 import 'vuetify/styles'
 import '@mdi/font/css/materialdesignicons.css'
-import 'vidstack/styles/base.css'
-import 'vidstack/styles/defaults.css'
-import 'vidstack/styles/community-skin/video.css'
-import 'vidstack/define/media-player.js'
-import 'vidstack/define/media-outlet.js'
-import 'vidstack/define/media-community-skin.js'
+
+const defaultThemeColors = {
+  light: '#1867c0',
+  dark: '#74a7ff',
+}
 
 const vuetify = createVuetify({
   components,
@@ -24,13 +23,13 @@ const vuetify = createVuetify({
       light: {
         dark: false,
         colors: {
-          primary: '#1867c0',
+          primary: defaultThemeColors.light,
         },
       },
       dark: {
         dark: true,
         colors: {
-          primary: '#74a7ff',
+          primary: defaultThemeColors.dark,
         },
       },
     },

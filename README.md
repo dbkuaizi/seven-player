@@ -1,88 +1,87 @@
-# Seven Player
+<p align="center">
+  <img src="./docs/images/logo.png" width="120" alt="Seven Player 图标" />
+</p>
 
-`Seven Player` 是一个用 `Go + Wails v3 + Vue 3 + Vuetify` 实现的桌面播放器原型：
+<h1 align="center">Seven Player</h1>
 
-- 启动后直接展示 115 网盘目录
-- 用 115 官方二维码接口扫码登录
-- 本地保存登录态，不依赖你自建服务端
-- 选中视频后通过本地代理交给外部播放器播放
+<p align="center">
+  面向 115 用户的 Windows 外部播放器体验增强工具
+</p>
 
-## 当前能力
+<p align="center">
+  <a href="https://www.dbkuaizi.com/archives/seven-player.html">作者博客</a>
+  ·
+  <a href="https://cnb.cool/dbkuaizi/seven-player">CNB</a>
+  ·
+  <a href="https://github.com/dbkuaizi/seven-player">GitHub</a>
+</p>
 
-- 115 二维码登录
-- 115 Cookie 登录
-- 登录态恢复
-- 浏览目录
-- 紧凑型文件管理界面
-- 115 离线下载任务管理
-- 搜索、类型筛选、排序、快捷目录访问
-- 双击视频交给外部播放器
-- 记住上次播放进度，再次打开时直接续播
-- 为单个视频绑定外挂字幕，并在下次播放时自动带上
-- 起播跳转，支持手动指定秒数或时间点
-- 自定义多个播放器路径
-- 切换默认播放器
+## 项目简介
 
-## 运行前提
+Seven Player 是一个使用 `Go + Wails v3 + Vue 3 + Vuetify` 构建的桌面应用，目标是让 115 网盘文件在 Windows 本地电脑上更方便地交给外部播放器播放。
 
-1. 安装 Go
-2. 安装 Wails v3 CLI: `go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha.80`
-3. 系统能运行 Wails 桌面应用
-4. 安装以下任一播放器，或者在应用里手动指定路径：
-   - `mpv`
-   - `VLC`
-   - `PotPlayer`
-   - `MPC-HC`
-   - `MPC-BE`
+基于当前技术栈，理论上可以适配 Linux 系统，包括 `x86` 与 `ARM` 架构；但由于暂时没有明确使用需求，当前不提供 Linux 预构建版本，有需要可以自行编译，也欢迎提交 Issue 交流。
 
-## 开发运行
+它不提供资源、不分发内容、不内置网页播放器，也不替代 115 官方服务。应用只负责登录、浏览文件、生成本地播放代理，并调用你电脑上已经安装的播放器。
 
-```bash
-wails3 dev
-```
+## 界面预览
 
-前端位于 `frontend/`，使用 `Vite` 构建；直接运行 `wails3 dev` / `wails3 build` 即可自动安装和编译前端依赖。
+<p align="center">
+  <img src="./docs/images/preview.png" alt="Seven Player 界面预览" />
+</p>
 
-## 打包
+## 功能特性
 
-```bash
-wails3 build
-```
+- 115 二维码登录、Cookie 登录与登录态恢复
+- 文件目录浏览、搜索、类型筛选、排序与快捷目录访问
+- 支持文件名简化、小文件隐藏与列表分页，浏览剧集目录更清爽
+- 115 离线下载任务查看与管理
+- 双击视频或点击立即播放，自动交给外部播放器
+- 支持默认播放器切换、播放器路径设置、启用与禁用
+- 支持外挂字幕绑定，下次播放自动带上字幕
+- 支持起播跳转，可按秒数或时间点开始播放
+- 支持续播记录，重新打开时可从上次位置继续
+- 支持精简文件标题、界面缩放、主题模式与主题色设置
+- 支持 115 隐私模式切换与隐私目录展示
+- 本地数据统一保存到 `data.db`，不上传到任何第三方服务
 
-当前仓库已按 Windows 本地开发做了精简。默认构建产物在：
+## 播放器支持
 
-- `bin/seven-player.exe`
-- 安装器：`build/windows/nsis/seven-player-installer.exe`
+以下为当前支持的外部播放器。推荐优先使用 MPV，续播、字幕和跳转能力最完整。
 
-## 凭证与设置
+| 播放器 | 推荐度 | 起播跳转 | 外挂字幕 | 说明 |
+| --- | --- | --- | --- | --- |
+| MPV | 首选推荐 | 支持 | 支持 | 续播记录最完整 |
+| PotPlayer | 推荐 | 支持 | 支持 | Windows 常用，兼容性好 |
+| VLC | 推荐 | 支持 | 支持 | 跨平台稳定，基础播放可靠 |
+| MPC-BE | 备用 | 暂不支持 | 支持 | 适合作为兼容播放器备用 |
+| MPC-HC | 备用 | 暂不支持 | 支持 | 旧版兼容播放器 |
 
-本地配置文件默认保存在程序目录：
+如果系统没有自动检测到播放器，可以在应用的系统设置里手动选择播放器可执行文件路径。
 
-- `seven-player.sqlite`
+## 本地数据
 
-保存内容包括：
+Seven Player 的登录状态、播放器路径、界面偏好、续播记录和字幕绑定都会保存在本机，不会上传到任何第三方服务。
 
-- 默认播放器
-- 各播放器路径
-- 115 登录 cookie 凭证
-- 上次浏览目录
-- 每个视频的续播记录
-- 每个视频的字幕路径
+应用不会保存或缓存你的媒体文件，播放时只会把文件交给你本地安装的外部播放器处理。
 
-日志文件默认在：
+## 技术栈与协议
 
-- Windows: `%AppData%\\seven-player\\seven-player.log`
-- `mpv` 日志: `seven-player.sqlite` 同目录下的 `mpv.log`
+- 技术栈：`Go`、`Wails v3`、`Vue 3`、`Vuetify`、`SQLite`
+- 开源协议：[Apache License 2.0](./LICENSE)
 
-`mpv` 的续播中间状态默认写在：
+## 开源地址
 
-- `seven-player.sqlite` 同目录下的 `mpv-watch-later`
+- CNB: https://cnb.cool/dbkuaizi/seven-player
+- GitHub: https://github.com/dbkuaizi/seven-player
+- 作者博客: https://www.dbkuaizi.com/archives/seven-player.html
 
-这份配置只保存在本机，不会上传到任何服务端。首次启动新版本时，会自动从同目录旧版 `panplayer.sqlite` 复制到 `seven-player.sqlite`。
+## 版权与声明
 
-## 说明
+Seven Player 以 Apache License 2.0 协议开源，免费提供给用户使用。项目本身不包含付费解锁、商业售卖或资源分发行为。
 
-- 当前已经做成播放器适配层，后面可以继续往更多播放器和平台扩展
-- 现在开发链默认只保留 Windows 构建；`mpv / VLC` 仍然可以作为后续跨平台播放器目标
-- 播放时会先经过本地回环代理，再由外部播放器拉流
-- 续播记录目前以 `mpv` 适配最完整；其他播放器已经支持基础启动、字幕和部分起播跳转能力
+本项目用于改善 115 用户在 Windows 本地电脑上的文件浏览与外部播放器调用体验，不提供内容资源，不存储或分发第三方内容，也不代表 115 官方立场。使用者应自行确认账号、文件和播放行为符合相关服务条款及适用法律法规。
+
+## 作者
+
+两双筷子

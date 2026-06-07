@@ -8,16 +8,17 @@ import (
 
 func TestStoreRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	store, err := NewStore(filepath.Join(dir, "seven-player.sqlite"))
+	dbPath := filepath.Join(dir, "data.db")
+	store, err := NewStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewStore() error = %v", err)
 	}
-	defer store.Close()
 
 	want := State{
 		Settings: Settings{
 			PreferredPlayer:   "vlc",
 			SmallFileFilterMB: 3,
+			ThemeColor:        "rose",
 			PlayerPaths: map[string]string{
 				"mpv": "C:/tools/mpv.exe",
 				"vlc": "C:/tools/vlc.exe",
@@ -82,6 +83,9 @@ func TestStoreRoundTrip(t *testing.T) {
 	if got.Settings.SmallFileFilterMB != want.Settings.SmallFileFilterMB {
 		t.Fatalf("SmallFileFilterMB mismatch: got %v want %v", got.Settings.SmallFileFilterMB, want.Settings.SmallFileFilterMB)
 	}
+	if got.Settings.ThemeColor != want.Settings.ThemeColor {
+		t.Fatalf("ThemeColor mismatch: got %q want %q", got.Settings.ThemeColor, want.Settings.ThemeColor)
+	}
 	if len(got.Settings.OfflineRecentTargets) != 1 || got.Settings.OfflineRecentTargets[0].ID != "100" {
 		t.Fatalf("OfflineRecentTargets mismatch: %+v", got.Settings.OfflineRecentTargets)
 	}
@@ -107,6 +111,13 @@ func TestStoreRoundTrip(t *testing.T) {
 	if got.Window.Width != 1280 || got.Window.Height != 820 || !got.Window.Maximised {
 		t.Fatalf("window state mismatch: %+v", got.Window)
 	}
+
+	assertNoSQLiteSidecars(t, dbPath)
+
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	assertNoSQLiteSidecars(t, dbPath)
 }
 
 func TestNormalizeLegacyMPVPath(t *testing.T) {
@@ -132,6 +143,22 @@ func TestNormalizeLegacyHideSmallFiles(t *testing.T) {
 	}
 	if settings.HideSmallFiles {
 		t.Fatalf("legacy hideSmallFiles flag should be cleared after migration")
+	}
+}
+
+func TestNormalizeThemeColor(t *testing.T) {
+	settings := normalizeSettings(Settings{
+		ThemeColor: "violet",
+	})
+	if settings.ThemeColor != "violet" {
+		t.Fatalf("theme color mismatch: %q", settings.ThemeColor)
+	}
+
+	settings = normalizeSettings(Settings{
+		ThemeColor: "unknown",
+	})
+	if settings.ThemeColor != "blue" {
+		t.Fatalf("invalid theme color should normalize to blue: %q", settings.ThemeColor)
 	}
 }
 
@@ -193,7 +220,7 @@ func TestNewStoreMigratesLegacyJSON(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	store, err := NewStore(filepath.Join(dir, "seven-player.sqlite"))
+	store, err := NewStore(filepath.Join(dir, "data.db"))
 	if err != nil {
 		t.Fatalf("NewStore() error = %v", err)
 	}
@@ -212,9 +239,10 @@ func TestNewStoreMigratesLegacyJSON(t *testing.T) {
 	}
 }
 
-func TestNewStoreMigratesLegacySQLite(t *testing.T) {
+func TestNewStoreMigratesSevenPlayerSQLite(t *testing.T) {
 	dir := t.TempDir()
-	legacyStore, err := NewStore(filepath.Join(dir, "panplayer.sqlite"))
+	legacyPath := filepath.Join(dir, "seven-player.sqlite")
+	legacyStore, err := NewStore(legacyPath)
 	if err != nil {
 		t.Fatalf("NewStore(legacy) error = %v", err)
 	}
@@ -230,7 +258,7 @@ func TestNewStoreMigratesLegacySQLite(t *testing.T) {
 		t.Fatalf("Close(legacy) error = %v", err)
 	}
 
-	store, err := NewStore(filepath.Join(dir, "seven-player.sqlite"))
+	store, err := NewStore(filepath.Join(dir, "data.db"))
 	if err != nil {
 		t.Fatalf("NewStore() error = %v", err)
 	}
@@ -246,5 +274,110 @@ func TestNewStoreMigratesLegacySQLite(t *testing.T) {
 	}
 	if got.Cookies["UID"] != "legacy" {
 		t.Fatalf("cookies mismatch: %+v", got.Cookies)
+	}
+	if _, err := os.Stat(legacyPath); err == nil {
+		t.Fatalf("legacy sqlite should be removed after migration: %s", legacyPath)
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("Stat(legacy) error = %v", err)
+	}
+}
+
+func TestNewStoreMigratesPanPlayerSQLite(t *testing.T) {
+	dir := t.TempDir()
+	legacyPath := filepath.Join(dir, "panplayer.sqlite")
+	legacyStore, err := NewStore(legacyPath)
+	if err != nil {
+		t.Fatalf("NewStore(legacy) error = %v", err)
+	}
+	if err := legacyStore.Save(State{
+		LastDirectoryID: "pan",
+		Cookies: map[string]string{
+			"UID": "pan-legacy",
+		},
+	}); err != nil {
+		t.Fatalf("Save(legacy) error = %v", err)
+	}
+	if err := legacyStore.Close(); err != nil {
+		t.Fatalf("Close(legacy) error = %v", err)
+	}
+
+	store, err := NewStore(filepath.Join(dir, "data.db"))
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+	defer store.Close()
+
+	got, err := store.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if got.LastDirectoryID != "pan" {
+		t.Fatalf("LastDirectoryID mismatch: got %q want %q", got.LastDirectoryID, "pan")
+	}
+	if got.Cookies["UID"] != "pan-legacy" {
+		t.Fatalf("cookies mismatch: %+v", got.Cookies)
+	}
+}
+
+func TestNewStoreRemovesLegacySQLiteWhenDataDBExists(t *testing.T) {
+	dir := t.TempDir()
+	dataPath := filepath.Join(dir, "data.db")
+	store, err := NewStore(dataPath)
+	if err != nil {
+		t.Fatalf("NewStore(data) error = %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close(data) error = %v", err)
+	}
+
+	for _, legacyName := range []string{"seven-player.sqlite", "panplayer.sqlite"} {
+		legacyPath := filepath.Join(dir, legacyName)
+		if err := os.WriteFile(legacyPath, []byte("stale"), 0o644); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", legacyName, err)
+		}
+	}
+
+	store, err = NewStore(dataPath)
+	if err != nil {
+		t.Fatalf("NewStore(existing data) error = %v", err)
+	}
+	defer store.Close()
+
+	for _, legacyName := range []string{"seven-player.sqlite", "panplayer.sqlite"} {
+		legacyPath := filepath.Join(dir, legacyName)
+		if _, err := os.Stat(legacyPath); err == nil {
+			t.Fatalf("legacy sqlite should be removed: %s", legacyPath)
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("Stat(%s) error = %v", legacyPath, err)
+		}
+	}
+}
+
+func TestCleanupSQLiteSidecars(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "data.db")
+	for _, suffix := range []string{"-wal", "-shm", "-journal"} {
+		if err := os.WriteFile(dbPath+suffix, []byte("stale"), 0o644); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", suffix, err)
+		}
+	}
+
+	if err := cleanupSQLiteSidecars(dbPath); err != nil {
+		t.Fatalf("cleanupSQLiteSidecars() error = %v", err)
+	}
+
+	assertNoSQLiteSidecars(t, dbPath)
+}
+
+func assertNoSQLiteSidecars(t *testing.T, dbPath string) {
+	t.Helper()
+
+	for _, suffix := range []string{"-wal", "-shm", "-journal"} {
+		path := dbPath + suffix
+		if _, err := os.Stat(path); err == nil {
+			t.Fatalf("unexpected sqlite sidecar exists: %s", path)
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("Stat(%s) error = %v", path, err)
+		}
 	}
 }

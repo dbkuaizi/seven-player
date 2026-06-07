@@ -152,90 +152,6 @@ export class BootstrapResult {
     }
 }
 
-export class BuiltinPlaybackSource {
-    /**
-     * Creates a new BuiltinPlaybackSource instance.
-     * @param {Partial<BuiltinPlaybackSource>} [$$source = {}] - The source object to create the BuiltinPlaybackSource.
-     */
-    constructor($$source = {}) {
-        if (!("url" in $$source)) {
-            /**
-             * @member
-             * @type {string}
-             */
-            this["url"] = "";
-        }
-        if (!("title" in $$source)) {
-            /**
-             * @member
-             * @type {string}
-             */
-            this["title"] = "";
-        }
-        if (!("startMs" in $$source)) {
-            /**
-             * @member
-             * @type {number}
-             */
-            this["startMs"] = 0;
-        }
-        if (!("resumeUsed" in $$source)) {
-            /**
-             * @member
-             * @type {boolean}
-             */
-            this["resumeUsed"] = false;
-        }
-        if (/** @type {any} */(false)) {
-            /**
-             * @member
-             * @type {string | undefined}
-             */
-            this["subtitleUrl"] = undefined;
-        }
-        if (/** @type {any} */(false)) {
-            /**
-             * @member
-             * @type {string | undefined}
-             */
-            this["subtitleName"] = undefined;
-        }
-        if (/** @type {any} */(false)) {
-            /**
-             * @member
-             * @type {string | undefined}
-             */
-            this["subtitlePath"] = undefined;
-        }
-        if (/** @type {any} */(false)) {
-            /**
-             * @member
-             * @type {string | undefined}
-             */
-            this["subtitleType"] = undefined;
-        }
-        if (!("subtitleUsable" in $$source)) {
-            /**
-             * @member
-             * @type {boolean}
-             */
-            this["subtitleUsable"] = false;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new BuiltinPlaybackSource instance from a string or object.
-     * @param {any} [$$source = {}]
-     * @returns {BuiltinPlaybackSource}
-     */
-    static createFrom($$source = {}) {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new BuiltinPlaybackSource(/** @type {Partial<BuiltinPlaybackSource>} */($$parsedSource));
-    }
-}
-
 export class DeleteOfflineRequest {
     /**
      * Creates a new DeleteOfflineRequest instance.
@@ -425,13 +341,6 @@ export class PlayResult {
              */
             this["subtitle"] = undefined;
         }
-        if (!("managedResume" in $$source)) {
-            /**
-             * @member
-             * @type {boolean}
-             */
-            this["managedResume"] = false;
-        }
 
         Object.assign(this, $$source);
     }
@@ -565,6 +474,13 @@ export class SettingsView {
              */
             this["themeMode"] = "";
         }
+        if (!("themeColor" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["themeColor"] = "";
+        }
         if (!("smallFileFilterMB" in $$source)) {
             /**
              * @member
@@ -597,13 +513,13 @@ export class SettingsView {
      */
     static createFrom($$source = {}) {
         const $$createField1_0 = $$createType8;
-        const $$createField9_0 = $$createType10;
+        const $$createField10_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("players" in $$parsedSource) {
             $$parsedSource["players"] = $$createField1_0($$parsedSource["players"]);
         }
         if ("offlineRecentTargets" in $$parsedSource) {
-            $$parsedSource["offlineRecentTargets"] = $$createField9_0($$parsedSource["offlineRecentTargets"]);
+            $$parsedSource["offlineRecentTargets"] = $$createField10_0($$parsedSource["offlineRecentTargets"]);
         }
         return new SettingsView(/** @type {Partial<SettingsView>} */($$parsedSource));
     }

@@ -1,4 +1,6 @@
 <script setup>
+import PageSizeMenu from '../app/PageSizeMenu.vue'
+
 const props = defineProps({
   loggedIn: { type: Boolean, default: false },
   downloadLoading: { type: Boolean, default: false },
@@ -232,16 +234,9 @@ function offlineTaskProgressText(task) {
           </div>
 
           <div class="pagination-controls">
-            <v-select
+            <PageSizeMenu
               :model-value="props.pageSize"
-              class="page-size-select"
-              density="compact"
-              hide-details
-              item-title="title"
-              item-value="value"
-              menu-icon="mdi-chevron-down"
               :items="props.pageSizeOptions"
-              variant="plain"
               @update:model-value="emit('page-size-change', $event)"
             />
 

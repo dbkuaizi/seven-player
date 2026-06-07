@@ -17,9 +17,7 @@ import {
   ListDirectory,
   ListOfflineTasks,
   PlayFile,
-  PrepareBuiltinPlayback,
   PreviewDirectory,
-  SavePlaybackProgress,
   SetHiddenMode,
   SearchFiles,
   SelectSubtitlePath,
@@ -35,8 +33,6 @@ import DownloadsPage from "./components/downloads/DownloadsPage.vue";
 import FolderPickerDialog from "./components/downloads/FolderPickerDialog.vue";
 import FileDetailDrawer from "./components/files/FileDetailDrawer.vue";
 import FileManagerPage from "./components/files/FileManagerPage.vue";
-import BuiltinPlayerDialog from "./components/player/BuiltinPlayerDialog.vue";
-import JumpDialog from "./components/player/JumpDialog.vue";
 import SettingsPage from "./components/settings/SettingsPage.vue";
 import {
   OFFLINE_TARGET_PICKER_VALUE,
@@ -68,6 +64,7 @@ import {
 import { isAppNotReadyError, isUserCancelledError } from "./utils/error";
 import { sanitizeErrorMessage } from "./utils/error";
 import {
+  cleanDisplayTitle,
   compareItems,
   formatResumeProgressText,
   normalizeFileItem,
@@ -78,16 +75,16 @@ import {
   normalizeOfflineState,
   offlineTaskMetaText,
 } from "./utils/offlineState";
-import { createEmptyBuiltinPlayer } from "./utils/playback";
 import {
   normalizeFileListDensity,
+  normalizeThemeColor,
   normalizeThemeMode,
+  resolveThemeColor,
   normalizeUIScalePercent,
 } from "./utils/settings";
 import {
   basename,
   normalizeMultilineInput,
-  parseTimeInput,
 } from "./utils/text";
 
 const activeSection = ref("files");
@@ -134,14 +131,6 @@ const downloadPageSize = ref(20);
 const searchDebounceTimer = ref(null);
 const searchRequestId = ref(0);
 
-const jumpDialogVisible = ref(false);
-const jumpInput = ref("");
-const jumpTargetKey = ref("");
-
-const builtinPlayerDialog = ref(false);
-const builtinPlayerLoading = ref(false);
-const builtinPlayer = ref(createEmptyBuiltinPlayer());
-const builtinPlayerSeekKey = ref("");
 const theme = useTheme();
 const systemDarkQuery =
   typeof window !== "undefined" && window.matchMedia
@@ -149,6 +138,7 @@ const systemDarkQuery =
     : null;
 const systemPrefersDark = ref(Boolean(systemDarkQuery?.matches));
 const activeThemeMode = ref("system");
+const activeThemeColor = ref("blue");
 
 const { notice, showNotice, showError, closeNotice } = useNotice();
 
@@ -173,10 +163,18 @@ function resolvedThemeName(mode = activeThemeMode.value) {
 
 function applyThemeMode(value) {
   activeThemeMode.value = normalizeThemeMode(value);
+  applyThemeColor(activeThemeColor.value);
   theme.global.name.value = resolvedThemeName();
   document.documentElement.style.colorScheme = theme.global.current.value.dark
     ? "dark"
     : "light";
+}
+
+function applyThemeColor(value) {
+  activeThemeColor.value = normalizeThemeColor(value);
+  const palette = resolveThemeColor(activeThemeColor.value);
+  theme.themes.value.light.colors.primary = palette.light;
+  theme.themes.value.dark.colors.primary = palette.dark;
 }
 
 function handleSystemThemeChange(event) {
@@ -230,6 +228,7 @@ const {
   saveCleanTitleDisplay,
   saveUIScale,
   saveThemeMode,
+  saveThemeColor,
   saveSmallFileFilter,
   saveFileListDensity,
   choosePlayerPath,
@@ -242,6 +241,7 @@ const {
   refreshFilePresentation,
   applyUIScale,
   applyThemeMode,
+  applyThemeColor,
 });
 
 const downloadDialog = ref(false);
@@ -269,16 +269,20 @@ const breadcrumbItems = computed(() => {
 const breadcrumbDisplayItems = computed(() =>
   breadcrumbItems.value.map((crumb, index) => ({
     id: crumb.id,
-    title: crumb.name,
+    title: breadcrumbTitle(crumb.name),
+    rawTitle: crumb.name,
     disabled: index === breadcrumbItems.value.length - 1,
+    isLast: index === breadcrumbItems.value.length - 1,
   })),
 );
 
 const folderPickerBreadcrumbDisplayItems = computed(() =>
   folderPickerPath.value.map((crumb, index) => ({
     id: crumb.id,
-    title: crumb.name,
+    title: breadcrumbTitle(crumb.name),
+    rawTitle: crumb.name,
     disabled: index === folderPickerPath.value.length - 1,
+    isLast: index === folderPickerPath.value.length - 1,
   })),
 );
 
@@ -412,23 +416,6 @@ const selectedLastPlayedText = computed(() => {
     return "暂无";
   }
   return formatDateTime(selectedItem.value.lastPlayedAt);
-});
-
-const builtinTextTracks = computed(() => {
-  if (!builtinPlayer.value?.subtitleUrl || !builtinPlayer.value?.subtitleType) {
-    return [];
-  }
-
-  return [
-    {
-      src: builtinPlayer.value.subtitleUrl,
-      type: builtinPlayer.value.subtitleType,
-      kind: "subtitles",
-      label: builtinPlayer.value.subtitleName || "外挂字幕",
-      language: "zh-CN",
-      default: true,
-    },
-  ];
 });
 
 const downloadTasks = computed(() => downloadState.value?.tasks ?? []);
@@ -587,7 +574,28 @@ watch(filteredItems, (list) => {
   selectedItem.value = matched ?? list[0];
 });
 
-watch([activeSection, loggedIn], ([section, signedIn]) => {
+watch(sortMode, () => {
+  if (!loggedIn.value || booting.value || isGlobalSearchActive.value) {
+    return;
+  }
+
+  loadDirectory(
+    currentDir.value,
+    {
+      fallbackName:
+        breadcrumbItems.value[breadcrumbItems.value.length - 1]?.name ||
+        "我的文件",
+      fallbackPath: breadcrumbItems.value,
+    },
+    1,
+  ).catch((error) => showError(error, "读取目录失败"));
+});
+
+watch([activeSection, loggedIn], ([section, signedIn], [previousSection]) => {
+  if (section !== previousSection) {
+    closeDetails();
+  }
+
   if (section === "downloads" && signedIn) {
     refreshOfflineTasks().catch((error) => showError(error, "读取云下载失败"));
   } else if (!signedIn) {
@@ -711,7 +719,12 @@ async function loadDirectory(dirId, options = {}, page = directoryPage.value) {
   const offset = (nextPage - 1) * pageSize.value;
 
   try {
-    const data = await ListDirectory(dirId, offset, pageSize.value);
+    const data = await ListDirectory(
+      dirId,
+      offset,
+      pageSize.value,
+      sortMode.value,
+    );
     const resolvedPath = resolveDirectoryPath(
       data,
       dirId,
@@ -722,6 +735,7 @@ async function loadDirectory(dirId, options = {}, page = directoryPage.value) {
     parentId.value = data?.parentId || "";
     currentPath.value = resolvedPath;
     items.value = (data?.items || []).map(normalizeItem);
+    syncHiddenModeFromItems(items.value);
     directoryTotal.value = Number(data?.count || items.value.length);
     directoryPage.value =
       Math.floor(
@@ -760,6 +774,7 @@ async function loadFolderPicker(dirId) {
     folderPickerDirId.value = data?.dirId || dirId;
     folderPickerPath.value = resolvedPath;
     rememberKnownPath(folderPickerDirId.value, resolvedPath);
+    syncHiddenModeFromItems((data?.items || []).map(normalizeItem));
     folderPickerFolders.value = (data?.items || [])
       .filter((item) => item.isDirectory)
       .map(normalizeItem);
@@ -804,6 +819,7 @@ async function performGlobalSearch(
     }
 
     searchResults.value = (data?.items || []).map(normalizeItem);
+    syncHiddenModeFromItems(searchResults.value);
     searchTotal.value = Number(data?.count || searchResults.value.length);
     searchPage.value =
       Math.floor(
@@ -960,6 +976,11 @@ function openDetails(item) {
   detailDrawer.value = true;
 }
 
+function closeDetails() {
+  selectedItem.value = null;
+  detailDrawer.value = false;
+}
+
 async function handlePrimaryAction(item) {
   if (!item) {
     return;
@@ -1041,12 +1062,13 @@ async function playVideo(item, options = {}) {
 
     showNotice("success", segments.join(" · "), 4200);
   } catch (error) {
-    const fallbackOpened = await openBuiltinPlayer(item, options, {
-      fallback: true,
-      loading: false,
-    });
-    if (fallbackOpened) {
-      showNotice("warning", "本地播放器启动失败，已切换到内置播放器。", 5200);
+    const message = sanitizeErrorMessage(error?.message || error);
+    if (isPlayerSetupError(message)) {
+      showNotice(
+        "warning",
+        "没有可用的外部播放器，请先在系统设置的播放器页设置本地播放器路径。",
+        5600,
+      );
     } else {
       showError(error, "启动播放失败");
     }
@@ -1055,156 +1077,20 @@ async function playVideo(item, options = {}) {
   }
 }
 
+function isPlayerSetupError(message) {
+  const value = String(message || "");
+  return (
+    value.includes("没有可用的播放器") ||
+    value.includes("未找到") ||
+    value.includes("路径不存在") ||
+    value.includes("请先配置播放器路径")
+  );
+}
+
 async function playVideoWithPlayer(payload) {
   await playVideo(payload?.item, {
     playerId: payload?.playerId || "",
   });
-}
-
-async function openBuiltinPlayer(
-  item = selectedItem.value,
-  options = {},
-  meta = {},
-) {
-  if (!item?.isVideo) {
-    return false;
-  }
-
-  if (meta.loading !== false) {
-    actionLoading.value = true;
-  }
-  builtinPlayerLoading.value = true;
-  selectedItem.value = item;
-
-  try {
-    const result = await PrepareBuiltinPlayback({
-      pickCode: item.pickCode,
-      name: item.name,
-      startMs: options.startMs || 0,
-      fromStart: Boolean(options.fromStart),
-      subtitle: options.subtitle || item.subtitlePath || "",
-    });
-
-    builtinPlayer.value = {
-      pickCode: item.pickCode,
-      rowKey: item.rowKey,
-      title: result?.title || item.displayName || item.name || "Seven Player",
-      url: result?.url || "",
-      startMs: Number(result?.startMs || 0),
-      resumeUsed: Boolean(result?.resumeUsed),
-      subtitleUrl: result?.subtitleUrl || "",
-      subtitleName: result?.subtitleName || "",
-      subtitlePath: result?.subtitlePath || item.subtitlePath || "",
-      subtitleType: result?.subtitleType || "",
-      subtitleUsable: Boolean(result?.subtitleUsable),
-      currentMs: Number(result?.startMs || 0),
-      ended: false,
-    };
-    builtinPlayerSeekKey.value = "";
-    builtinPlayerDialog.value = true;
-
-    applyPlaybackState(item.pickCode, {
-      resumeMs: options.fromStart ? 0 : result?.startMs || item.resumeMs || 0,
-      subtitlePath:
-        typeof result?.subtitlePath === "string"
-          ? result.subtitlePath
-          : item.subtitlePath || "",
-      lastPlayedAt: new Date().toISOString(),
-    });
-
-    if (result?.subtitlePath && !result?.subtitleUsable) {
-      showNotice("warning", "内置播放器暂不支持当前字幕格式。");
-    } else if (!meta.fallback && !meta.silent) {
-      showNotice("success", "已打开内置播放器。");
-    }
-
-    return true;
-  } catch (error) {
-    if (!meta.fallback) {
-      showError(error, "内置播放器启动失败");
-    }
-    return false;
-  } finally {
-    builtinPlayerLoading.value = false;
-    if (meta.loading !== false) {
-      actionLoading.value = false;
-    }
-  }
-}
-
-function handleBuiltinCanPlay(player) {
-  const startMS = Number(builtinPlayer.value?.startMs || 0);
-  const key = `${builtinPlayer.value?.pickCode || ""}:${startMS}`;
-  if (!player || startMS <= 0 || builtinPlayerSeekKey.value === key) {
-    return;
-  }
-
-  player.currentTime = startMS / 1000;
-  builtinPlayerSeekKey.value = key;
-}
-
-function handleBuiltinTimeUpdate(event) {
-  const currentTime = Number(event?.detail?.currentTime || 0);
-  if (!Number.isFinite(currentTime)) {
-    return;
-  }
-  builtinPlayer.value = {
-    ...builtinPlayer.value,
-    currentMs: Math.max(0, Math.floor(currentTime * 1000)),
-  };
-}
-
-function handleBuiltinEnded() {
-  builtinPlayer.value = {
-    ...builtinPlayer.value,
-    currentMs: 0,
-    ended: true,
-  };
-  persistBuiltinProgress();
-}
-
-function handleBuiltinError() {
-  showNotice(
-    "warning",
-    "内置播放器无法播放当前视频，请尝试 mpv 或 VLC。",
-    5200,
-  );
-}
-
-function closeBuiltinPlayer(playerElement = null) {
-  persistBuiltinProgress();
-  if (playerElement?.pause) {
-    playerElement.pause();
-  }
-  builtinPlayerDialog.value = false;
-  builtinPlayer.value = createEmptyBuiltinPlayer();
-}
-
-async function playExternalFromBuiltin() {
-  const item = selectedItem.value;
-  closeBuiltinPlayer();
-  await playVideo(item);
-}
-
-async function persistBuiltinProgress() {
-  const source = builtinPlayer.value;
-  if (!source?.pickCode) {
-    return;
-  }
-
-  const positionMS = source.ended
-    ? 0
-    : Math.max(0, Number(source.currentMs || 0));
-  try {
-    const result = await SavePlaybackProgress(
-      source.pickCode,
-      source.title || "",
-      positionMS,
-    );
-    applyPlaybackState(source.pickCode, result);
-  } catch (error) {
-    showError(error, "保存播放进度失败");
-  }
 }
 
 async function chooseSubtitle(item = selectedItem.value) {
@@ -1218,28 +1104,6 @@ async function chooseSubtitle(item = selectedItem.value) {
     const result = await SelectSubtitlePath(item.pickCode);
     applyPlaybackState(item.pickCode, result);
     showNotice("success", result?.subtitleName || "外挂字幕路径已保存。");
-    if (
-      builtinPlayerDialog.value &&
-      builtinPlayer.value.pickCode === item.pickCode
-    ) {
-      const refreshedItem =
-        selectedItem.value?.pickCode === item.pickCode
-          ? selectedItem.value
-          : normalizeItem({
-              ...item,
-              subtitlePath: result?.subtitlePath || "",
-            });
-      await openBuiltinPlayer(
-        refreshedItem,
-        {
-          startMs: builtinPlayer.value.currentMs || 0,
-        },
-        {
-          loading: false,
-          silent: true,
-        },
-      );
-    }
   } catch (error) {
     if (isUserCancelledError(error)) {
       return;
@@ -1264,19 +1128,6 @@ async function clearSubtitle(item = selectedItem.value) {
       "success",
       `已移除 ${item.displayName || item.name} 的字幕绑定。`,
     );
-    if (
-      builtinPlayerDialog.value &&
-      builtinPlayer.value.pickCode === item.pickCode
-    ) {
-      builtinPlayer.value = {
-        ...builtinPlayer.value,
-        subtitleUrl: "",
-        subtitleName: "",
-        subtitlePath: "",
-        subtitleType: "",
-        subtitleUsable: false,
-      };
-    }
   } catch (error) {
     showError(error, "清除字幕失败");
   } finally {
@@ -1335,35 +1186,6 @@ function applyPlaybackState(pickCode, patch) {
     const matched = items.value.find((entry) => entry.pickCode === pickCode);
     selectedItem.value = matched ?? selectedItem.value;
   }
-}
-
-function openJumpDialog(item = selectedItem.value) {
-  if (!item?.isVideo) {
-    return;
-  }
-
-  jumpTargetKey.value = item.rowKey;
-  jumpInput.value = item.resumeMs ? formatDurationMs(item.resumeMs) : "";
-  jumpDialogVisible.value = true;
-}
-
-async function confirmJump() {
-  const item = items.value.find(
-    (entry) => entry.rowKey === jumpTargetKey.value,
-  );
-  if (!item) {
-    jumpDialogVisible.value = false;
-    return;
-  }
-
-  const parsed = parseTimeInput(jumpInput.value);
-  if (parsed === null) {
-    showNotice("warning", "时间格式不正确，支持 90、01:30、01:02:03。");
-    return;
-  }
-
-  jumpDialogVisible.value = false;
-  await playVideo(item, { startMs: parsed });
 }
 
 async function reloadCurrentDirectory() {
@@ -1526,6 +1348,12 @@ function handleUIScaleInput(value) {
 function handleThemeModeInput(value) {
   saveThemeMode(value).catch((error) =>
     showError(error, "保存外观模式失败"),
+  );
+}
+
+function handleThemeColorInput(value) {
+  saveThemeColor(value).catch((error) =>
+    showError(error, "保存主题色失败"),
   );
 }
 
@@ -1769,12 +1597,6 @@ function handleKeydown(event) {
     return;
   }
 
-  if (event.key === "Escape" && builtinPlayerDialog.value) {
-    event.preventDefault();
-    closeBuiltinPlayer();
-    return;
-  }
-
   if (
     (event.ctrlKey || event.metaKey) &&
     event.key.toLowerCase() === "f" &&
@@ -1804,6 +1626,25 @@ function normalizeItem(item) {
     showTitleBadges: settings.value?.showTitleBadges,
     cleanTitleDisplay: settings.value?.cleanTitleDisplay,
   });
+}
+
+function breadcrumbTitle(name) {
+  const title = String(name || "").trim();
+  if (!title || title === "我的文件") {
+    return title;
+  }
+  if (settings.value?.cleanTitleDisplay === false) {
+    return title;
+  }
+  return cleanDisplayTitle(title, {
+    cleanTitleDisplay: settings.value?.cleanTitleDisplay,
+  });
+}
+
+function syncHiddenModeFromItems(fileItems) {
+  if (!hiddenModeEnabled.value && fileItems?.some((item) => item?.isHiddenFile)) {
+    hiddenModeEnabled.value = true;
+  }
 }
 
 function refreshFilePresentation() {
@@ -1957,6 +1798,7 @@ function sleep(ms) {
               @preview-ui-scale="applyUIScale"
               @save-ui-scale="handleUIScaleInput"
               @save-theme-mode="handleThemeModeInput"
+              @save-theme-color="handleThemeColorInput"
               @select-player="selectPlayerFromList"
               @choose-player-path="choosePlayerPath"
               @toggle-player-disabled="togglePlayerDisabled"
@@ -1978,9 +1820,6 @@ function sleep(ms) {
         @primary-action="handlePrimaryAction"
         @play="playVideo"
         @play-with-player="playVideoWithPlayer"
-        @builtin-play="openBuiltinPlayer"
-        @play-from-start="(item) => playVideo(item, { fromStart: true })"
-        @jump="openJumpDialog"
         @choose-subtitle="chooseSubtitle"
         @clear-subtitle="clearSubtitle"
         @clear-progress="clearProgress"
@@ -2036,25 +1875,5 @@ function sleep(ms) {
       @open-directory="openFolderPickerDirectory"
     />
 
-    <BuiltinPlayerDialog
-      v-model="builtinPlayerDialog"
-      :player="builtinPlayer"
-      :loading="builtinPlayerLoading"
-      :text-tracks="builtinTextTracks"
-      :selected-item="selectedItem"
-      @close="closeBuiltinPlayer"
-      @choose-subtitle="chooseSubtitle"
-      @external-play="playExternalFromBuiltin"
-      @can-play="handleBuiltinCanPlay"
-      @time-update="handleBuiltinTimeUpdate"
-      @ended="handleBuiltinEnded"
-      @error="handleBuiltinError"
-    />
-
-    <JumpDialog
-      v-model="jumpDialogVisible"
-      v-model:jump-input="jumpInput"
-      @confirm="confirmJump"
-    />
   </v-app>
 </template>
