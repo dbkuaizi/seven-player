@@ -1,0 +1,42 @@
+$:
+  tag_push:
+    - runner:
+        cpus: 4
+      stages:
+        - name: build windows exe
+          image: golang:1.25-bookworm
+          script: |
+            set -e
+
+            apt-get update
+            apt-get install -y ca-certificates curl
+            curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+            apt-get install -y nodejs
+
+            go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha.80
+            export PATH="$(go env GOPATH)/bin:${PATH}"
+
+            wails3 task build
+
+            mkdir -p release
+            cp bin/seven-player.exe release/seven-player-windows-amd64.exe
+            cat > release/RELEASE_NOTES.md <<EOF
+            Seven Player ${CNB_BRANCH}
+
+            面向 115 用户的 Windows 外部播放器体验增强工具。
+
+            本次 Release 附件由 CNB 在线构建生成，下载 seven-player-windows-amd64.exe 后即可运行。
+            EOF
+
+        - name: create release
+          type: git:release
+          options:
+            title: Seven Player ${CNB_BRANCH}
+            descriptionFromFile: release/RELEASE_NOTES.md
+            latest: true
+
+        - name: upload release attachment
+          image: cnbcool/attachments:latest
+          settings:
+            attachments:
+              - release/seven-player-windows-amd64.exe
