@@ -2,11 +2,11 @@ $:
   tag_push:
     - runner:
         tags: cnb:arch:amd64
-        cpus: 8
+        cpus: 2
       stages:
-        - name: build release binaries
-          image: golang:1.25-bookworm
-          script: bash .cnb/scripts/release-build.sh
+        - name: prepare release notes
+          image: alpine:3.20
+          script: sh .cnb/scripts/release-notes.sh
 
         - name: create release
           type: git:release
@@ -15,10 +15,46 @@ $:
             descriptionFromFile: release/RELEASE_NOTES.md
             latest: true
 
-        - name: upload release attachments
+        - name: release ready
+          type: cnb:resolve
+          options:
+            key: seven-player-release-ready
+
+    - runner:
+        tags: cnb:arch:amd64
+        cpus: 8
+      stages:
+        - name: wait release
+          type: cnb:await
+          options:
+            key: seven-player-release-ready
+
+        - name: build windows x64 and linux x64
+          image: golang:1.25-bookworm
+          script: bash .cnb/scripts/release-build-amd64.sh
+
+        - name: upload x64 attachments
           image: cnbcool/attachments:latest
           settings:
             attachments:
               - release/seven-player-windows-amd64.exe
               - release/seven-player-linux-amd64
+
+    - runner:
+        tags: cnb:arch:arm64:v8
+        cpus: 8
+      stages:
+        - name: wait release
+          type: cnb:await
+          options:
+            key: seven-player-release-ready
+
+        - name: build linux arm64
+          image: golang:1.25-bookworm
+          script: bash .cnb/scripts/release-build-arm64.sh
+
+        - name: upload arm64 attachment
+          image: cnbcool/attachments:latest
+          settings:
+            attachments:
               - release/seven-player-linux-arm64
