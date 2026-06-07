@@ -20,13 +20,11 @@ $:
 
             mkdir -p release
             cp bin/seven-player.exe release/seven-player-windows-amd64.exe
-            cat > release/RELEASE_NOTES.md <<EOF
-Seven Player ${CNB_BRANCH}
-
-面向 115 用户的 Windows 外部播放器体验增强工具。
-
-本次 Release 附件由 CNB 在线构建生成，下载 seven-player-windows-amd64.exe 后即可运行。
-            EOF
+            {
+              printf 'Seven Player %s\n\n' "${CNB_BRANCH}"
+              printf '%s\n\n' '面向 115 用户的 Windows 外部播放器体验增强工具。'
+              printf '%s\n' '本次 Release 附件由 CNB 在线构建生成，下载 seven-player-windows-amd64.exe 后即可运行。'
+            } > release/RELEASE_NOTES.md
 
         - name: create release
           type: git:release
