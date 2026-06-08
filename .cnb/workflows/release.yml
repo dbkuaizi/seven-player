@@ -15,6 +15,13 @@ $:
             descriptionFromFile: release/RELEASE_NOTES.md
             latest: true
 
+        - name: create github release
+          image: alpine:3.20
+          imports: https://cnb.cool/dbkuaizi/safe-env/-/blob/main/git/github.yml
+          script: |
+            apk add --no-cache curl git jq
+            sh .cnb/scripts/github-release.sh
+
         - name: release ready
           type: cnb:resolve
           options:
@@ -40,6 +47,15 @@ $:
               - release/seven-player-windows-amd64.exe
               - release/seven-player-linux-amd64
 
+        - name: upload x64 to github release
+          image: alpine:3.20
+          imports: https://cnb.cool/dbkuaizi/safe-env/-/blob/main/git/github.yml
+          script: |
+            apk add --no-cache curl jq
+            sh .cnb/scripts/github-upload.sh \
+              release/seven-player-windows-amd64.exe \
+              release/seven-player-linux-amd64
+
     - runner:
         tags: cnb:arch:arm64:v8
         cpus: 8
@@ -58,3 +74,10 @@ $:
           settings:
             attachments:
               - release/seven-player-linux-arm64
+
+        - name: upload arm64 to github release
+          image: alpine:3.20
+          imports: https://cnb.cool/dbkuaizi/safe-env/-/blob/main/git/github.yml
+          script: |
+            apk add --no-cache curl jq
+            sh .cnb/scripts/github-upload.sh release/seven-player-linux-arm64

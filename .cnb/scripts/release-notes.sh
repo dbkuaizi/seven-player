@@ -12,5 +12,6 @@ mkdir -p release
   printf '%s\n' '- Linux x64: `seven-player-linux-amd64`'
   printf '%s\n\n' '- Linux ARM64: `seven-player-linux-arm64`'
   printf '以上附件均由 CNB 在线构建生成，并使用 `upx -9` 压缩。\n\n'
+  printf 'CNB Release 是主发布渠道；同一批构建产物会同步上传到 GitHub Release，GitHub 不单独构建。\n\n'
   printf 'Windows 用户下载 exe 后即可运行。Linux 版本为理论支持产物，需要系统具备 GTK/WebKitGTK 运行环境；如遇兼容问题，可以自行编译或提交 Issue。\n'
 } > release/RELEASE_NOTES.md
